@@ -636,6 +636,28 @@
     color: var(--income);
     margin-top: 2px;
   }
+  /* トースト */
+  .toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s, transform 0.25s;
+    z-index: 9999;
+    white-space: nowrap;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 </style>
 </head>
 <body>
@@ -1077,6 +1099,7 @@
     </div>
   </div>
 </div>
+<div class="toast" id="toastEl"></div>
 
 <!-- Firebase -->
 <script type="module">
@@ -1163,24 +1186,31 @@ window.toggleAccordion = (header) => {
 };
 
 // ===== Firestore: 設定読み込み =====
-async function loadSettings() {
-  const snap = await getDocs(collection(db, 'kakeibo_settings'));
-  settings = { categories: [], incomeTypes: [], shops: [], accounts: [], cards: [], badCategories: [] };
-  snap.forEach(d => {
-    const data = { id: d.id, ...d.data() };
-    if (data._type === 'category') settings.categories.push(data);
-    else if (data._type === 'incomeType') settings.incomeTypes.push(data);
-    else if (data._type === 'shop') settings.shops.push(data);
-    else if (data._type === 'account') settings.accounts.push(data);
-    else if (data._type === 'card') settings.cards.push(data);
-    else if (data._type === 'badCategory') settings.badCategories.push(data);
+let _settingsInitialized = false;
+function loadSettings() {
+  if (_settingsInitialized) return Promise.resolve();
+  _settingsInitialized = true;
+  return new Promise((resolve) => {
+    let firstFire = true;
+    onSnapshot(collection(db, 'kakeibo_settings'), (snap) => {
+      settings = { categories: [], incomeTypes: [], shops: [], accounts: [], cards: [], badCategories: [] };
+      snap.forEach(d => {
+        const data = { id: d.id, ...d.data() };
+        if (data._type === 'category') settings.categories.push(data);
+        else if (data._type === 'incomeType') settings.incomeTypes.push(data);
+        else if (data._type === 'shop') settings.shops.push(data);
+        else if (data._type === 'account') settings.accounts.push(data);
+        else if (data._type === 'card') settings.cards.push(data);
+        else if (data._type === 'badCategory') settings.badCategories.push(data);
+      });
+      ['categories','incomeTypes','shops','accounts','cards','badCategories'].forEach(k => {
+        settings[k].sort((a,b) => (a.order||0) - (b.order||0));
+      });
+      renderSettings();
+      populateSelects();
+      if (firstFire) { firstFire = false; resolve(); }
+    });
   });
-  // order ソート
-  ['categories','incomeTypes','shops','accounts','cards','badCategories'].forEach(k => {
-    settings[k].sort((a,b) => (a.order||0) - (b.order||0));
-  });
-  renderSettings();
-  populateSelects();
 }
 
 function populateSelects() {
@@ -1497,9 +1527,11 @@ window.saveExpense = async () => {
     const duplicate = settings.shops.find(s => s.name === shop);
     if (!duplicate || confirm(`「${shop}」はすでに登録されています。\n重複して登録しますか？`)) {
       await addDoc(collection(db, 'kakeibo_settings'), {
-        _type: 'shop', name: shop, order: settings.shops.length
+        _type: 'shop', name: shop, ward: '', category: '', order: settings.shops.length
       });
+      showToast(`「${shop}」をお店テンプレに登録しました`);
     }
+    shopRegCheck.checked = false;
   }
   closeAddModal();
   await loadMonthData();
@@ -2046,6 +2078,13 @@ window.moveSettingItem = async (type, i, delta) => {
 function todayStr() {
   const t = new Date();
   return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toastEl');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
 }
 
 function showConfirm(msg, cb) {
