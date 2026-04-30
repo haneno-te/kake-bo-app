@@ -17,6 +17,8 @@
     --text: #e8eaf6;
     --text2: #8892b0;
     --card: #1e2235;
+    --bad: #ff9f43;
+    --bad-bg: rgba(255,159,67,0.12);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -648,8 +650,8 @@
       <div class="summary-value income" id="sumIncome">¥0</div>
     </div>
     <div class="summary-item">
-      <div class="summary-label">収支</div>
-      <div class="summary-value balance" id="sumBalance">¥0</div>
+      <div class="summary-label">無駄遣い</div>
+      <div class="summary-value" style="color:var(--bad);" id="sumBad">¥0</div>
     </div>
   </div>
 
@@ -760,6 +762,21 @@
       <div style="color:var(--text2);font-size:12px;text-align:center;">データ蓄積中...</div>
     </div>
   </div>
+
+  <div class="card" id="badSummaryCard">
+    <div class="card-title">👿 無駄遣い集計</div>
+    <div style="background:var(--bad-bg);border:1px solid var(--bad);border-radius:10px;padding:14px;margin-bottom:10px;">
+      <div style="font-size:11px;color:var(--bad);font-weight:700;margin-bottom:4px;">今月の無駄遣い合計</div>
+      <div style="font-size:24px;font-weight:700;color:var(--bad);" id="badTotal">¥0</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:4px;" id="badRatioText"></div>
+    </div>
+    <div class="progress-bar-wrap" style="margin-bottom:10px;">
+      <div id="badProgressBar" style="height:100%;border-radius:6px;background:linear-gradient(90deg,var(--bad),#ffcc02);transition:width 0.4s;width:0%;"></div>
+    </div>
+    <div id="badCategoryBreakdown"></div>
+    <div class="card-title" style="margin-top:12px;">過去6ヶ月のBAD推移</div>
+    <div id="badMonthlyChart" style="padding:8px 0;"></div>
+  </div>
 </div>
 
 <!-- ⑥設定タブ -->
@@ -803,6 +820,14 @@
     <input type="text" id="newCardInput" placeholder="カード名（例：楽天カード）">
     <button onclick="addCard()">追加</button>
   </div>
+
+  <!-- BADカテゴリ -->
+  <div class="section-title">👿 BADカテゴリ（無駄遣い分類）</div>
+  <div class="setting-list" id="badCategoryList"></div>
+  <div class="add-item-row">
+    <input type="text" id="newBadCategoryInput" placeholder="BADカテゴリ名（例：衝動買い）">
+    <button onclick="addBadCategory()">追加</button>
+  </div>
 </div>
 
 <!-- 支出入力モーダル -->
@@ -845,6 +870,9 @@
       <label class="form-label">メモ（任意）</label>
       <input type="text" class="form-input" id="inputMemo" placeholder="内容メモ">
     </div>
+    <div class="section-title" style="margin-top:8px;">内訳（任意・複数追加可）</div>
+    <div id="breakdownList"></div>
+    <button class="btn-secondary" onclick="addBreakdownRow()" style="margin-bottom:10px;">＋ 内訳を追加</button>
     <button class="btn-primary" onclick="saveExpense()">保存</button>
     <button class="btn-secondary" onclick="closeAddModal()">キャンセル</button>
   </div>
@@ -1011,7 +1039,8 @@ let settings = {
   incomeTypes: [],
   shops: [],
   accounts: [],
-  cards: []
+  cards: [],
+  badCategories: []
 };
 let editingExpenseId = null;
 let editingFixedId = null;
@@ -1058,7 +1087,7 @@ window.switchTab = (tabName) => {
 // ===== Firestore: 設定読み込み =====
 async function loadSettings() {
   const snap = await getDocs(collection(db, 'kakeibo_settings'));
-  settings = { categories: [], incomeTypes: [], shops: [], accounts: [], cards: [] };
+  settings = { categories: [], incomeTypes: [], shops: [], accounts: [], cards: [], badCategories: [] };
   snap.forEach(d => {
     const data = { id: d.id, ...d.data() };
     if (data._type === 'category') settings.categories.push(data);
@@ -1066,9 +1095,10 @@ async function loadSettings() {
     else if (data._type === 'shop') settings.shops.push(data);
     else if (data._type === 'account') settings.accounts.push(data);
     else if (data._type === 'card') settings.cards.push(data);
+    else if (data._type === 'badCategory') settings.badCategories.push(data);
   });
   // order ソート
-  ['categories','incomeTypes','shops','accounts','cards'].forEach(k => {
+  ['categories','incomeTypes','shops','accounts','cards','badCategories'].forEach(k => {
     settings[k].sort((a,b) => (a.order||0) - (b.order||0));
   });
   renderSettings();
@@ -1107,6 +1137,43 @@ function populateSelects() {
     itSel.innerHTML += `<option value="${t.id}">${t.name}</option>`;
   });
 }
+
+function populateBadCategorySelect(selectEl) {
+  selectEl.innerHTML = '<option value="">BADカテゴリを選択</option>';
+  settings.badCategories.forEach(c => {
+    selectEl.innerHTML += `<option value="${c.name}">${c.name}</option>`;
+  });
+}
+
+window.addBreakdownRow = () => {
+  const row = document.createElement('div');
+  row.className = 'breakdown-row';
+  row.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;';
+  row.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <input type="text" placeholder="項目名" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;">
+      <input type="number" placeholder="金額" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;">
+      <button onclick="this.closest('.breakdown-row').remove()" style="background:rgba(255,107,107,0.15);border:none;color:var(--expense);border-radius:6px;padding:4px 8px;cursor:pointer;">×</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;">
+      <input type="checkbox" onchange="toggleBadRow(this)" style="accent-color:var(--bad);">
+      <span>👿 BADとしてマーク</span>
+    </label>
+    <div class="bad-category-wrap" style="display:none;margin-top:8px;">
+      <select style="width:100%;background:var(--bg);border:1px solid var(--bad);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;">
+        <option value="">BADカテゴリを選択</option>
+      </select>
+    </div>
+  `;
+  const sel = row.querySelector('.bad-category-wrap select');
+  populateBadCategorySelect(sel);
+  document.getElementById('breakdownList').appendChild(row);
+};
+
+window.toggleBadRow = (checkbox) => {
+  const wrap = checkbox.closest('.breakdown-row').querySelector('.bad-category-wrap');
+  wrap.style.display = checkbox.checked ? 'block' : 'none';
+};
 
 // ===== 月次データ読み込み =====
 async function loadMonthData() {
@@ -1178,6 +1245,7 @@ function renderCalendar() {
     const dayIncomes = incomes.filter(e => e.date === dateStr);
     const totalExp = dayExpenses.reduce((s,e) => s + (e.amount||0), 0);
     const totalInc = dayIncomes.reduce((s,e) => s + (e.amount||0), 0);
+    const hasBad = dayExpenses.some(e => e.breakdowns && e.breakdowns.some(b => b.isBad));
     const isToday = dateStr === todayStr;
     const isSelected = dateStr === selectedDate;
 
@@ -1191,6 +1259,7 @@ function renderCalendar() {
       <span class="cal-date">${d}</span>
       ${totalExp > 0 ? `<span class="cal-amount">¥${totalExp.toLocaleString()}</span>` : ''}
       ${totalInc > 0 ? `<span class="cal-income-amount">+¥${totalInc.toLocaleString()}</span>` : ''}
+      ${hasBad ? '<span style="display:block;width:5px;height:5px;background:var(--bad);border-radius:50%;margin:1px auto 0;"></span>' : ''}
     </div>`;
   }
   grid.innerHTML = html;
@@ -1221,11 +1290,25 @@ function renderDayDetail(dateStr) {
   dayExp.forEach(e => {
     const catName = settings.categories.find(c => c.id === e.categoryId)?.name || '';
     const typeLabel = e.type === 'work' ? '仕事' : e.type === 'other' ? 'その他' : 'プライベート';
+    let breakdownHtml = '';
+    if (e.breakdowns && e.breakdowns.length > 0) {
+      breakdownHtml = '<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">';
+      e.breakdowns.forEach(b => {
+        const badStyle = b.isBad ? `background:var(--bad-bg);border-left:2px solid var(--bad);` : '';
+        const badge = b.isBad ? `<span style="font-size:9px;background:var(--bad);color:#fff;border-radius:3px;padding:1px 5px;margin-left:4px;">👿 ${b.badCategory || 'BAD'}</span>` : '';
+        breakdownHtml += `<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);padding:3px 6px;border-radius:4px;${badStyle}">
+          <span>${b.name || '内訳'}${badge}</span>
+          <span style="${b.isBad ? 'color:var(--bad);font-weight:700;' : ''}">¥${(b.amount||0).toLocaleString()}</span>
+        </div>`;
+      });
+      breakdownHtml += '</div>';
+    }
     html += `<div class="record-item">
       <div class="record-left">
         <div class="record-category">${catName}${catName ? ' · ' : ''}${typeLabel}</div>
         <div class="record-memo">${e.memo || '（メモなし）'}</div>
         ${e.shop ? `<div class="record-shop">📍${e.shop}</div>` : ''}
+        ${breakdownHtml}
       </div>
       <div class="record-right">
         <div class="record-amount">¥${(e.amount||0).toLocaleString()}</div>
@@ -1258,12 +1341,13 @@ function renderDayDetail(dateStr) {
 function renderSummaryBar() {
   const totalExp = expenses.reduce((s,e) => s + (e.amount||0), 0);
   const totalInc = incomes.reduce((s,e) => s + (e.amount||0), 0);
-  const bal = totalInc - totalExp;
+  const totalBad = expenses.reduce((s,e) => {
+    if (!e.breakdowns) return s;
+    return s + e.breakdowns.filter(b => b.isBad).reduce((ss,b) => ss + (b.amount||0), 0);
+  }, 0);
   document.getElementById('sumExpense').textContent = '¥' + totalExp.toLocaleString();
   document.getElementById('sumIncome').textContent = '¥' + totalInc.toLocaleString();
-  const balEl = document.getElementById('sumBalance');
-  balEl.textContent = (bal >= 0 ? '+' : '') + '¥' + bal.toLocaleString();
-  balEl.style.color = bal >= 0 ? 'var(--income)' : 'var(--expense)';
+  document.getElementById('sumBad').textContent = '¥' + totalBad.toLocaleString();
 }
 
 // ===== 支出 CRUD =====
@@ -1277,6 +1361,7 @@ window.openAddModal = () => {
   document.getElementById('inputShop').value = '';
   document.getElementById('inputShopSelect').value = '';
   document.getElementById('inputCategory').value = '';
+  document.getElementById('breakdownList').innerHTML = '';
   setExpenseType('private');
   document.getElementById('addModal').classList.add('open');
 };
@@ -1302,7 +1387,16 @@ window.saveExpense = async () => {
   const shop = document.getElementById('inputShop').value.trim();
   const categoryId = document.getElementById('inputCategory').value;
   if (!date || !amount) { alert('日付と金額は必須です'); return; }
-  const data = { date, amount, memo, shop, categoryId, type: currentExpenseType };
+  const breakdowns = [];
+  document.querySelectorAll('#breakdownList .breakdown-row').forEach(row => {
+    const inputs = row.querySelectorAll('input[type=text], input[type=number]');
+    const name = inputs[0].value.trim();
+    const amt = parseInt(inputs[1].value) || 0;
+    const isBad = row.querySelector('input[type=checkbox]').checked;
+    const badCategory = isBad ? row.querySelector('select').value : '';
+    if (name || amt) breakdowns.push({ name, amount: amt, isBad, badCategory });
+  });
+  const data = { date, amount, memo, shop, categoryId, type: currentExpenseType, breakdowns };
   if (editingExpenseId) {
     await updateDoc(doc(db, 'expenses', editingExpenseId), data);
   } else {
@@ -1323,6 +1417,34 @@ window.editExpense = (id) => {
   document.getElementById('inputShop').value = e.shop || '';
   document.getElementById('inputCategory').value = e.categoryId || '';
   setExpenseType(e.type || 'private');
+  // breakdowns 復元
+  const bList = document.getElementById('breakdownList');
+  bList.innerHTML = '';
+  (e.breakdowns || []).forEach(b => {
+    const row = document.createElement('div');
+    row.className = 'breakdown-row';
+    row.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;';
+    row.innerHTML = `
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input type="text" placeholder="項目名" value="${b.name || ''}" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;">
+        <input type="number" placeholder="金額" value="${b.amount || ''}" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;">
+        <button onclick="this.closest('.breakdown-row').remove()" style="background:rgba(255,107,107,0.15);border:none;color:var(--expense);border-radius:6px;padding:4px 8px;cursor:pointer;">×</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;">
+        <input type="checkbox" onchange="toggleBadRow(this)" style="accent-color:var(--bad);" ${b.isBad ? 'checked' : ''}>
+        <span>👿 BADとしてマーク</span>
+      </label>
+      <div class="bad-category-wrap" style="display:${b.isBad ? 'block' : 'none'};margin-top:8px;">
+        <select style="width:100%;background:var(--bg);border:1px solid var(--bad);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;">
+          <option value="">BADカテゴリを選択</option>
+        </select>
+      </div>
+    `;
+    const sel = row.querySelector('.bad-category-wrap select');
+    populateBadCategorySelect(sel);
+    if (b.isBad && b.badCategory) sel.value = b.badCategory;
+    bList.appendChild(row);
+  });
   document.getElementById('addModal').classList.add('open');
 };
 
@@ -1624,6 +1746,45 @@ function renderSummary() {
   document.getElementById('statPrivate').textContent = '¥' + privExp.toLocaleString();
   document.getElementById('workRatioBar').style.width = workRatio + '%';
   document.getElementById('workRatioLabel').textContent = `仕事 ${workRatio}%`;
+
+  // BAD集計
+  const allBreakdowns = expenses.flatMap(e => (e.breakdowns || []).filter(b => b.isBad));
+  const totalBadAmt = allBreakdowns.reduce((s,b) => s + (b.amount||0), 0);
+  const totalExp2 = expenses.reduce((s,e) => s + (e.amount||0), 0);
+  const badPct = totalExp2 > 0 ? Math.round(totalBadAmt / totalExp2 * 100) : 0;
+
+  document.getElementById('badTotal').textContent = '¥' + totalBadAmt.toLocaleString();
+  document.getElementById('badRatioText').textContent =
+    `支出の${badPct}% ／ これがなければ ¥${totalBadAmt.toLocaleString()} 節約できた`;
+  document.getElementById('badProgressBar').style.width = Math.min(badPct, 100) + '%';
+
+  // カテゴリ別内訳
+  const catMap = {};
+  allBreakdowns.forEach(b => {
+    const k = b.badCategory || '未分類';
+    if (!catMap[k]) catMap[k] = { total: 0, count: 0 };
+    catMap[k].total += b.amount || 0;
+    catMap[k].count++;
+  });
+  const badCatHtml = Object.entries(catMap)
+    .sort((a,b) => b[1].total - a[1].total)
+    .map(([name, v]) => {
+      const pct = totalExp2 > 0 ? Math.round(v.total / totalExp2 * 100) : 0;
+      return `<div class="stat-row">
+        <span class="stat-label">${name}（${v.count}件）</span>
+        <span class="stat-value" style="color:var(--bad);">¥${v.total.toLocaleString()} <span style="font-size:10px;color:var(--text2);">${pct}%</span></span>
+      </div>`;
+    }).join('') || '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">BAD記録なし</div>';
+  document.getElementById('badCategoryBreakdown').innerHTML = badCatHtml;
+
+  // 過去6ヶ月BADチャート（現月フォールバック実装）
+  const badChartHtml = `<div style="display:flex;align-items:flex-end;gap:6px;height:60px;">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+      <div style="width:100%;background:var(--bad);border-radius:4px 4px 0 0;height:${Math.min(badPct, 100) * 0.6}px;min-height:2px;"></div>
+      <div style="font-size:9px;color:var(--text2);">${currentMonth}月</div>
+    </div>
+  </div>`;
+  document.getElementById('badMonthlyChart').innerHTML = badChartHtml;
 }
 
 // ===== 設定タブ =====
@@ -1633,6 +1794,7 @@ function renderSettings() {
   renderSettingList('shopList', settings.shops, 'shop');
   renderAccountSettingList();
   renderCardSettingList();
+  renderSettingList('badCategoryList', settings.badCategories, 'badCategory');
 }
 
 function renderSettingList(containerId, items, type) {
@@ -1727,6 +1889,15 @@ window.addCard = async () => {
   await loadSettings();
 };
 
+window.addBadCategory = async () => {
+  const input = document.getElementById('newBadCategoryInput');
+  const name = input.value.trim();
+  if (!name) return;
+  await addDoc(collection(db, 'kakeibo_settings'), { _type: 'badCategory', name, order: settings.badCategories.length });
+  input.value = '';
+  await loadSettings();
+};
+
 window.deleteSettingItem = (id, type) => {
   showConfirm('この項目を削除しますか？', async () => {
     await deleteDoc(doc(db, 'kakeibo_settings', id));
@@ -1736,7 +1907,7 @@ window.deleteSettingItem = (id, type) => {
 };
 
 window.moveSettingItem = async (type, i, delta) => {
-  const map = { category: 'categories', incomeType: 'incomeTypes', shop: 'shops', account: 'accounts', card: 'cards' };
+  const map = { category: 'categories', incomeType: 'incomeTypes', shop: 'shops', account: 'accounts', card: 'cards', badCategory: 'badCategories' };
   const arr = settings[map[type]];
   const j = i + delta;
   if (j < 0 || j >= arr.length) return;
