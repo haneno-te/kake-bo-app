@@ -1181,6 +1181,7 @@ let currentFixKind = 'private';
 let currentTxType = 'deposit';
 let currentCpInstall = 'once';
 let confirmCallback = null;
+let isComposing = false;
 let adjustAccountId = null;
 let cardConfirmTargetId = null;
 
@@ -2184,7 +2185,7 @@ function appendBreakdownRow(b = {}) {
     <div class="breakdown-row-top">
       <input type="text" placeholder="項目名" value="${b.name||''}">
       <input type="number" placeholder="金額" value="${b.amount||''}">
-      <button onclick="this.closest('.breakdown-row').remove()">×</button>
+      <button onclick="window.removeBreakdownRowWithConfirm(this)">×</button>
     </div>
     <label class="bad-row-toggle">
       <input type="checkbox" class="bad-check" onchange="toggleBadRow(this)" ${b.isBad?'checked':''}>
@@ -2561,6 +2562,7 @@ function showConfirm(msg, cb, okLabel = '削除') {
   document.getElementById('confirmOkBtn').textContent = okLabel;
   confirmCallback = cb;
   document.getElementById('confirmOverlay').classList.add('open');
+  setTimeout(() => document.querySelector('#confirmOverlay .confirm-cancel').focus(), 50);
 }
 window.confirmOk = () => {
   document.getElementById('confirmOverlay').classList.remove('open');
@@ -2572,19 +2574,38 @@ window.confirmCancel = () => {
   confirmCallback = null;
 };
 
+// IME制御
+document.addEventListener('compositionstart', () => { isComposing = true; });
+document.addEventListener('compositionend', () => { isComposing = false; });
+
 // Enterキー対応
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
+  if (isComposing) return;
+  // confirmOverlay が開いているときはEnterをすべて無効化
   if (document.getElementById('confirmOverlay').classList.contains('open')) {
-    confirmOk(); return;
+    e.preventDefault(); return;
   }
-  // モーダル内でEnterで保存（テキストエリア以外）
+  // モーダル内でEnterで保存（テキストエリア・SELECT・BUTTON以外）
+  const tag = document.activeElement.tagName;
+  if (tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
   const activeModal = document.querySelector('.modal-overlay.open');
-  if (activeModal && document.activeElement.tagName !== 'TEXTAREA') {
+  if (activeModal) {
     const primary = activeModal.querySelector('.btn-primary');
-    if (primary) primary.click();
+    if (primary) { e.preventDefault(); primary.click(); }
   }
 });
+
+// confirmOverlay内でのEnterキーを完全無効化
+document.getElementById('confirmOverlay').addEventListener('keydown', e => {
+  if (e.key === 'Enter') e.preventDefault();
+});
+
+// 内訳行の削除確認
+window.removeBreakdownRowWithConfirm = (btn) => {
+  const row = btn.closest('.breakdown-row');
+  showConfirm('この内訳を削除しますか？', () => { row.remove(); });
+};
 
 // ===== トースト =====
 function showToast(msg) {
