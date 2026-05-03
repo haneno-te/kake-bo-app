@@ -54,23 +54,24 @@
   }
   .month-label { font-size: 14px; font-weight: 600; min-width: 80px; text-align: center; }
   .tabs {
-    display: flex;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
   }
-  .tabs::-webkit-scrollbar { display: none; }
+  .tab-row {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-row:last-child { border-bottom: none; }
   .tab-btn {
-    flex: none;
-    padding: 10px 14px;
+    flex: 1;
+    padding: 8px 4px;
     background: none;
     border: none;
     color: var(--text2);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
-    white-space: nowrap;
+    text-align: center;
     border-bottom: 2px solid transparent;
     transition: all 0.2s;
   }
@@ -202,6 +203,44 @@
   .breakdown-display-item.bad {
     background: var(--bad-bg); border-left: 2px solid var(--bad);
   }
+
+  /* 支出タブ アコーディオン */
+  .exp-day-section { margin-bottom: 12px; }
+  .exp-day-header {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; cursor: pointer; margin-bottom: 4px;
+  }
+  .exp-day-header.open { border-color: var(--accent); }
+  .exp-day-title { font-size: 12px; font-weight: 700; color: var(--text2); }
+  .exp-day-total { font-size: 12px; font-weight: 700; color: var(--expense); }
+
+  /* 支出コンパクトアイテム */
+  .exp-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; margin-bottom: 4px;
+  }
+  .exp-item-row1 {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 2px;
+  }
+  .exp-item-shop { font-size: 13px; font-weight: 700; color: var(--text); flex: 1; }
+  .exp-item-amount { font-size: 14px; font-weight: 700; color: var(--expense); margin-left: 8px; }
+  .exp-item-row2 { font-size: 11px; color: var(--text2); margin-bottom: 2px; }
+  .exp-item-row3 {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; color: var(--text2);
+  }
+  .exp-item-memo { flex: 1; }
+  .exp-item-actions { display: flex; gap: 4px; }
+  .exp-breakdown {
+    margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border);
+  }
+  .exp-breakdown-item {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--text2); padding: 2px 0;
+  }
+  .exp-breakdown-item.bad { color: var(--bad); }
 
   /* フォーム */
   .form-row { margin-bottom: 10px; }
@@ -535,14 +574,18 @@
 </div>
 
 <div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('calendar')">📅 カレンダー</button>
-  <button class="tab-btn" onclick="switchTab('expenses')">💸 支出</button>
-  <button class="tab-btn" onclick="switchTab('income')">💴 収入</button>
-  <button class="tab-btn" onclick="switchTab('accounts')">🏦 口座</button>
-  <button class="tab-btn" onclick="switchTab('card')">💳 カード</button>
-  <button class="tab-btn" onclick="switchTab('fixed')">📌 固定費</button>
-  <button class="tab-btn" onclick="switchTab('summary')">📊 集計</button>
-  <button class="tab-btn" onclick="switchTab('settings')">⚙️ 設定</button>
+  <div class="tab-row">
+    <button class="tab-btn active" onclick="switchTab('calendar')">📅 カレンダー</button>
+    <button class="tab-btn" onclick="switchTab('expenses')">💸 支出</button>
+    <button class="tab-btn" onclick="switchTab('income')">💴 収入</button>
+    <button class="tab-btn" onclick="switchTab('accounts')">🏦 口座</button>
+  </div>
+  <div class="tab-row">
+    <button class="tab-btn" onclick="switchTab('card')">💳 カード</button>
+    <button class="tab-btn" onclick="switchTab('fixed')">📌 固定費</button>
+    <button class="tab-btn" onclick="switchTab('summary')">📊 集計</button>
+    <button class="tab-btn" onclick="switchTab('settings')">⚙️ 設定</button>
+  </div>
 </div>
 
 <!-- カレンダータブ -->
@@ -562,6 +605,11 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="cal-grid" id="calHeader"></div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+
   <div id="calDayPanel" class="day-panel">
     <div class="day-panel-header">
       <div class="day-panel-title" id="calDayTitle"></div>
@@ -572,11 +620,6 @@
       </div>
     </div>
     <div id="calDayList"></div>
-  </div>
-
-  <div class="card">
-    <div class="cal-grid" id="calHeader"></div>
-    <div class="cal-grid" id="calGrid"></div>
   </div>
 </div>
 
@@ -1226,6 +1269,11 @@ window.switchTab = (tabName) => {
   document.getElementById('tab-' + tabName).classList.add('active');
   if (tabName === 'summary') renderSummary();
   if (tabName === 'accounts') renderAccountsTab();
+  if (tabName === 'calendar') {
+    selectedDate = null;
+    window.selectedDate = null;
+    document.getElementById('calDayPanel').classList.remove('open');
+  }
 };
 
 window.toggleAccordion = (header) => {
@@ -1603,15 +1651,69 @@ function renderExpenseTab() {
   const sortedDates = Object.keys(grouped).sort((a,b) => b.localeCompare(a));
   list.innerHTML = sortedDates.map(date => {
     const [,m,d] = date.split('-');
-    const dayTotal = grouped[date].reduce((s,e) => s + (e.amount||0), 0);
-    return `<div style="margin-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-        <div style="font-size:12px;font-weight:700;color:var(--text2);">${parseInt(m)}月${parseInt(d)}日</div>
-        <div style="font-size:12px;font-weight:700;color:var(--expense);">¥${dayTotal.toLocaleString()}</div>
+    const dayItems = grouped[date];
+    const dayTotal = dayItems.reduce((s,e) => s + (e.amount||0), 0);
+    const count = dayItems.length;
+    return `<div class="exp-day-section">
+      <div class="exp-day-header open" onclick="this.classList.toggle('open');this.nextElementSibling.style.display=this.classList.contains('open')?'block':'none';">
+        <span class="exp-day-title">${parseInt(m)}月${parseInt(d)}日（${count}件）</span>
+        <span class="exp-day-total">合計 ¥${dayTotal.toLocaleString()}</span>
       </div>
-      ${grouped[date].map(e => buildExpenseCard(e)).join('')}
+      <div class="exp-day-body">${dayItems.map(e => buildExpenseCompact(e)).join('')}</div>
     </div>`;
   }).join('');
+}
+
+function buildExpenseCompact(e) {
+  const catName = settings.categories.find(c => c.id === e.categoryId)?.name || '';
+  const typeLabel = e.type === 'work' ? '仕事' : e.type === 'other' ? 'その他' : 'プライベート';
+  const payLabel = e.payMethod === 'card'
+    ? (settings.cards.find(c => c.id === e.cardId)?.name || 'カード')
+    : e.payMethod === 'transfer'
+    ? (settings.accounts.find(a => a.id === e.accountId)?.name || '口座振込')
+    : '現金';
+  const payBadgeClass = e.payMethod === 'card' ? 'card' : e.payMethod === 'transfer' ? 'transfer' : 'cash';
+
+  const normalBDs = (e.breakdowns || []).filter(b => !b.isBad);
+  const badBDs = (e.breakdowns || []).filter(b => b.isBad);
+  const hasBad = badBDs.length > 0;
+
+  let breakdownHtml = '';
+  if (normalBDs.length > 0 || badBDs.length > 0) {
+    breakdownHtml = '<div class="exp-breakdown">';
+    normalBDs.forEach(b => {
+      breakdownHtml += `<div class="exp-breakdown-item">
+        <span>${b.name || '内訳'}</span><span>¥${(b.amount||0).toLocaleString()}</span>
+      </div>`;
+    });
+    badBDs.forEach(b => {
+      breakdownHtml += `<div class="exp-breakdown-item bad">
+        <span>👿 ${b.name || '内訳'}${b.badCategory ? ` <span style="font-size:9px;">${b.badCategory}</span>` : ''}</span>
+        <span>¥${(b.amount||0).toLocaleString()}</span>
+      </div>`;
+    });
+    breakdownHtml += '</div>';
+  }
+
+  const shopDisplay = e.shop || '（店名なし）';
+  const row2Parts = [`<span class="pay-badge ${payBadgeClass}">${payLabel}</span>`, typeLabel];
+  if (catName) row2Parts.push(catName);
+
+  return `<div class="exp-item">
+    <div class="exp-item-row1">
+      <span class="exp-item-shop">${hasBad ? '👿 ' : ''}${shopDisplay}</span>
+      <span class="exp-item-amount">¥${(e.amount||0).toLocaleString()}</span>
+    </div>
+    <div class="exp-item-row2">${row2Parts.join(' / ')}</div>
+    <div class="exp-item-row3">
+      <span class="exp-item-memo">${e.memo || ''}</span>
+      <span class="exp-item-actions">
+        <button class="btn-edit" onclick="openExpenseModal('${e.id}')">✏️</button>
+        <button class="btn-del" onclick="deleteExpense('${e.id}')">🗑️</button>
+      </span>
+    </div>
+    ${breakdownHtml}
+  </div>`;
 }
 
 // ===== 収入タブ =====
@@ -2195,6 +2297,9 @@ function appendBreakdownRow(b = {}) {
       <select class="bad-cat-sel" style="width:100%;background:var(--bg);border:1px solid var(--bad);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;"></select>
     </div>
   `;
+  const textInput = row.querySelector('input[type="text"]');
+  textInput.addEventListener('compositionstart', () => { isComposing = true; });
+  textInput.addEventListener('compositionend', () => { isComposing = false; });
   const sel = row.querySelector('.bad-cat-sel');
   populateBadCategorySel(sel);
   if (b.isBad && b.badCategory) sel.value = b.badCategory;
