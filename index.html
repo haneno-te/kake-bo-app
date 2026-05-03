@@ -1303,6 +1303,16 @@ function updateMonthLabel() {
 
 // ===== タブ切替 =====
 window.switchTab = (tabName) => {
+  // 離れるタブのアコーディオンをすべて閉じる
+  document.querySelectorAll('.accordion-header.open').forEach(h => {
+    h.classList.remove('open');
+    h.nextElementSibling.style.display = 'none';
+  });
+  document.querySelectorAll('#expenseList .exp-day-header.open').forEach(h => {
+    h.classList.remove('open');
+    if (h.nextElementSibling) h.nextElementSibling.style.display = 'none';
+  });
+
   const tabs = ['calendar','expenses','income','accounts','card','fixed','summary','settings'];
   document.querySelectorAll('.tab-btn').forEach((b,i) => {
     b.classList.toggle('active', tabs[i] === tabName);
@@ -1315,12 +1325,6 @@ window.switchTab = (tabName) => {
     selectedDate = null;
     window.selectedDate = null;
     document.getElementById('calDayPanel').classList.remove('open');
-  }
-  if (tabName === 'expenses') {
-    document.querySelectorAll('#expenseList .exp-day-header').forEach(h => {
-      h.classList.remove('open');
-      if (h.nextElementSibling) h.nextElementSibling.style.display = 'none';
-    });
   }
 };
 
@@ -2541,9 +2545,14 @@ function renderSettings() {
     </div>
   `).join('');
 
-  // 費目
+  // 費目（非表示項目を末尾に）
   const catContainer = document.getElementById('categoryList');
-  catContainer.innerHTML = settings.categories.map((item, i) => {
+  const sortedCats = [
+    ...settings.categories.filter(x => !x.hidden),
+    ...settings.categories.filter(x => x.hidden)
+  ];
+  catContainer.innerHTML = sortedCats.map(item => {
+    const i = settings.categories.indexOf(item);
     const groupName = item.groupId ? settings.catGroups.find(g => g.id === item.groupId)?.name || '' : '';
     return `<div class="setting-item${item.hidden?' setting-item-hidden':''}">
       <div style="display:flex;gap:2px;">
@@ -2571,9 +2580,14 @@ function renderSettings() {
     </div>
   `).join('');
 
-  // お店
+  // お店（非表示項目を末尾に）
   const shopContainer = document.getElementById('shopList');
-  shopContainer.innerHTML = settings.shops.map((item, i) => {
+  const sortedShops = [
+    ...settings.shops.filter(x => !x.hidden),
+    ...settings.shops.filter(x => x.hidden)
+  ];
+  shopContainer.innerHTML = sortedShops.map(item => {
+    const i = settings.shops.indexOf(item);
     const groupName = item.groupId ? settings.shopGroups.find(g => g.id === item.groupId)?.name || '' : '';
     return `<div class="setting-item${item.hidden?' setting-item-hidden':''}">
       <div style="display:flex;gap:2px;">
