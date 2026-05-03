@@ -357,6 +357,7 @@
     background: var(--accent); border: none; color: #fff;
     border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
   }
+  .add-item-row-group button { background: var(--income); }
 
   /* 口座カード */
   .account-card {
@@ -750,21 +751,21 @@
       <span>費目（支出カテゴリ）</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
-      <div id="catGroupList" style="margin-bottom:8px;"></div>
-      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">グループ追加：</div>
-      <div class="add-item-row" style="margin-bottom:10px;">
-        <input type="text" id="newCatGroupInput" placeholder="グループ名（例：食費）">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">カテゴリ追加：</div>
+      <div class="add-item-row add-item-row-group" style="margin-bottom:10px;">
+        <input type="text" id="newCatGroupInput" placeholder="カテゴリ名（例：食費）">
         <button onclick="addCatGroup()">追加</button>
       </div>
-      <div class="setting-list" id="categoryList"></div>
+      <div id="catGroupList" style="margin-bottom:8px;"></div>
       <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">費目追加：</div>
       <div class="add-item-row">
         <select id="newCategoryGroupSel" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;-webkit-appearance:none;">
-          <option value="">グループなし</option>
+          <option value="">カテゴリなし</option>
         </select>
         <input type="text" id="newCategoryInput" placeholder="費目名" style="flex:2;">
         <button onclick="addCategory()">追加</button>
       </div>
+      <div class="setting-list" id="categoryList"></div>
     </div>
   </div>
 
@@ -773,11 +774,11 @@
       <span>収入項目</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
-      <div class="setting-list" id="incomeTypeList"></div>
       <div class="add-item-row">
         <input type="text" id="newIncomeTypeInput" placeholder="収入項目名を入力">
         <button onclick="addIncomeType()">追加</button>
       </div>
+      <div class="setting-list" id="incomeTypeList"></div>
     </div>
   </div>
 
@@ -786,21 +787,21 @@
       <span>よく使うお店・場所</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
-      <div id="shopGroupList" style="margin-bottom:8px;"></div>
-      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">グループ追加：</div>
-      <div class="add-item-row" style="margin-bottom:10px;">
-        <input type="text" id="newShopGroupInput" placeholder="グループ名（例：コンビニ）">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">カテゴリ追加：</div>
+      <div class="add-item-row add-item-row-group" style="margin-bottom:10px;">
+        <input type="text" id="newShopGroupInput" placeholder="カテゴリ名（例：コンビニ）">
         <button onclick="addShopGroup()">追加</button>
       </div>
-      <div class="setting-list" id="shopList"></div>
+      <div id="shopGroupList" style="margin-bottom:8px;"></div>
       <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">お店追加：</div>
       <div class="add-item-row">
         <select id="newShopGroupSel" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;-webkit-appearance:none;">
-          <option value="">グループなし</option>
+          <option value="">カテゴリなし</option>
         </select>
         <input type="text" id="newShopInput" placeholder="店名・場所" style="flex:2;">
         <button onclick="addShop()">追加</button>
       </div>
+      <div class="setting-list" id="shopList"></div>
     </div>
   </div>
 
@@ -809,11 +810,11 @@
       <span>銀行口座・現金</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
-      <div class="setting-list" id="accountSettingList"></div>
       <div class="add-item-row">
         <input type="text" id="newAccountInput" placeholder="口座名（例：ゆうちょ）">
         <button onclick="addAccount()">追加</button>
       </div>
+      <div class="setting-list" id="accountSettingList"></div>
     </div>
   </div>
 
@@ -822,11 +823,11 @@
       <span>クレジットカード</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
-      <div class="setting-list" id="cardSettingList"></div>
       <div class="add-item-row">
         <input type="text" id="newCardInput" placeholder="カード名（例：楽天カード）">
         <button onclick="addCard()">追加</button>
       </div>
+      <div class="setting-list" id="cardSettingList"></div>
     </div>
   </div>
 
@@ -835,11 +836,11 @@
       <span>👿 BADカテゴリ</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
-      <div class="setting-list" id="badCategoryList"></div>
       <div class="add-item-row">
         <input type="text" id="newBadCategoryInput" placeholder="BADカテゴリ名（例：衝動買い）">
         <button onclick="addBadCategory()">追加</button>
       </div>
+      <div class="setting-list" id="badCategoryList"></div>
     </div>
   </div>
 
@@ -1336,7 +1337,7 @@ function populateSelects() {
 
   // 費目グループ選択（設定）
   const catGSel = document.getElementById('newCategoryGroupSel');
-  catGSel.innerHTML = '<option value="">グループなし</option>';
+  catGSel.innerHTML = '<option value="">カテゴリなし</option>';
   settings.catGroups.forEach(g => { catGSel.innerHTML += `<option value="${g.id}">${g.name}</option>`; });
 
   // お店テンプレ
@@ -1355,7 +1356,7 @@ function populateSelects() {
 
   // お店グループ選択（設定）
   const shopGSel = document.getElementById('newShopGroupSel');
-  shopGSel.innerHTML = '<option value="">グループなし</option>';
+  shopGSel.innerHTML = '<option value="">カテゴリなし</option>';
   settings.shopGroups.forEach(g => { shopGSel.innerHTML += `<option value="${g.id}">${g.name}</option>`; });
 
   // カード
@@ -2495,7 +2496,7 @@ function renderSettings() {
   const catGContainer = document.getElementById('catGroupList');
   catGContainer.innerHTML = settings.catGroups.map(g => `
     <div class="setting-item">
-      <div class="setting-item-name" style="color:var(--accent);">📁 ${g.name}</div>
+      <div class="setting-item-name" style="color:var(--income);">📁 ${g.name}</div>
       <button class="btn-icon-del" onclick="deleteSettingItem('${g.id}','catGroup')">🗑️</button>
     </div>
   `).join('');
@@ -2521,7 +2522,7 @@ function renderSettings() {
   const shopGContainer = document.getElementById('shopGroupList');
   shopGContainer.innerHTML = settings.shopGroups.map(g => `
     <div class="setting-item">
-      <div class="setting-item-name" style="color:var(--accent);">📁 ${g.name}</div>
+      <div class="setting-item-name" style="color:var(--income);">📁 ${g.name}</div>
       <button class="btn-icon-del" onclick="deleteSettingItem('${g.id}','shopGroup')">🗑️</button>
     </div>
   `).join('');
