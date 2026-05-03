@@ -347,6 +347,7 @@
     color: var(--text2); border-radius: 4px; width: 28px; height: 28px;
     font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;
   }
+  .setting-item-hidden { opacity: 0.45; }
   .add-item-row { display: flex; gap: 8px; margin-top: 8px; }
   .add-item-row input {
     flex: 1; background: var(--surface2); border: 1px solid var(--border);
@@ -844,6 +845,23 @@
     </div>
   </div>
 
+  <div class="accordion-section">
+    <div class="accordion-header" onclick="toggleAccordion(this)">
+      <span>⚙️ 操作設定</span><span class="accordion-arrow">▼</span>
+    </div>
+    <div class="accordion-body" style="display:none;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px;">削除確認ポップアップのデフォルト</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;cursor:pointer;">
+        <input type="radio" name="deleteConfirmDefault" value="cancel" onchange="saveDeleteConfirmDefault('cancel')">
+        常にキャンセル（推奨）
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+        <input type="radio" name="deleteConfirmDefault" value="ok" onchange="saveDeleteConfirmDefault('ok')">
+        常にOK
+      </label>
+    </div>
+  </div>
+
 </div>
 
 <!-- ===== モーダル群 ===== -->
@@ -1164,6 +1182,28 @@
   </div>
 </div>
 
+<!-- 設定項目編集モーダル -->
+<div class="modal-overlay" id="settingEditModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <div class="modal-title">項目を編集</div>
+      <button class="modal-close" onclick="closeModal('settingEditModal')">×</button>
+    </div>
+    <div class="form-row">
+      <label class="form-label">項目名</label>
+      <input type="text" class="form-input" id="editSettingName">
+    </div>
+    <div class="form-row" id="editSettingGroupRow">
+      <label class="form-label">カテゴリ</label>
+      <select class="form-select" id="editSettingGroupSel">
+        <option value="">カテゴリなし</option>
+      </select>
+    </div>
+    <button class="btn-primary" onclick="saveSettingEdit()">保存</button>
+    <button class="btn-secondary" id="editSettingCancelBtn" onclick="closeModal('settingEditModal')">キャンセル</button>
+  </div>
+</div>
+
 <!-- 確認ダイアログ -->
 <div class="confirm-overlay" id="confirmOverlay">
   <div class="confirm-box">
@@ -1326,13 +1366,13 @@ function populateSelects() {
   const catSel = document.getElementById('exp-categoryId');
   catSel.innerHTML = '<option value="">-- 選択（任意）--</option>';
   settings.catGroups.forEach(g => {
-    const items = settings.categories.filter(c => c.groupId === g.id);
+    const items = settings.categories.filter(c => c.groupId === g.id && !c.hidden);
     if (items.length) {
       catSel.innerHTML += `<optgroup label="${g.name}">` +
         items.map(c => `<option value="${c.id}">${c.name}</option>`).join('') + '</optgroup>';
     }
   });
-  const ungrouped = settings.categories.filter(c => !c.groupId);
+  const ungrouped = settings.categories.filter(c => !c.groupId && !c.hidden);
   ungrouped.forEach(c => { catSel.innerHTML += `<option value="${c.id}">${c.name}</option>`; });
 
   // 費目グループ選択（設定）
@@ -1344,13 +1384,13 @@ function populateSelects() {
   const shopSel = document.getElementById('exp-shopSelect');
   shopSel.innerHTML = '<option value="">-- テンプレから選択 --</option>';
   settings.shopGroups.forEach(g => {
-    const items = settings.shops.filter(s => s.groupId === g.id);
+    const items = settings.shops.filter(s => s.groupId === g.id && !s.hidden);
     if (items.length) {
       shopSel.innerHTML += `<optgroup label="${g.name}">` +
         items.map(s => `<option value="${s.name}">${s.name}</option>`).join('') + '</optgroup>';
     }
   });
-  settings.shops.filter(s => !s.groupId).forEach(s => {
+  settings.shops.filter(s => !s.groupId && !s.hidden).forEach(s => {
     shopSel.innerHTML += `<option value="${s.name}">${s.name}</option>`;
   });
 
@@ -2505,12 +2545,16 @@ function renderSettings() {
   const catContainer = document.getElementById('categoryList');
   catContainer.innerHTML = settings.categories.map((item, i) => {
     const groupName = item.groupId ? settings.catGroups.find(g => g.id === item.groupId)?.name || '' : '';
-    return `<div class="setting-item">
+    return `<div class="setting-item${item.hidden?' setting-item-hidden':''}">
       <div style="display:flex;gap:2px;">
         <button class="btn-order" onclick="moveSettingItem('category',${i},-1)">▲</button>
         <button class="btn-order" onclick="moveSettingItem('category',${i},1)">▼</button>
       </div>
       <div class="setting-item-name">${item.name}${groupName?` <span style="font-size:10px;color:var(--text2);">[${groupName}]</span>`:''}</div>
+      <label style="display:flex;align-items:center;gap:2px;font-size:10px;color:var(--text2);cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" ${item.hidden?'checked':''} onchange="toggleSettingHidden('${item.id}',this.checked)">非表示
+      </label>
+      <button class="btn-icon-edit" onclick="openSettingEditModal('${item.id}','category')">✏️</button>
       <button class="btn-icon-del" onclick="deleteSettingItem('${item.id}','category')">🗑️</button>
     </div>`;
   }).join('');
@@ -2531,12 +2575,16 @@ function renderSettings() {
   const shopContainer = document.getElementById('shopList');
   shopContainer.innerHTML = settings.shops.map((item, i) => {
     const groupName = item.groupId ? settings.shopGroups.find(g => g.id === item.groupId)?.name || '' : '';
-    return `<div class="setting-item">
+    return `<div class="setting-item${item.hidden?' setting-item-hidden':''}">
       <div style="display:flex;gap:2px;">
         <button class="btn-order" onclick="moveSettingItem('shop',${i},-1)">▲</button>
         <button class="btn-order" onclick="moveSettingItem('shop',${i},1)">▼</button>
       </div>
       <div class="setting-item-name">${item.name}${groupName?` <span style="font-size:10px;color:var(--text2);">[${groupName}]</span>`:''}</div>
+      <label style="display:flex;align-items:center;gap:2px;font-size:10px;color:var(--text2);cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" ${item.hidden?'checked':''} onchange="toggleSettingHidden('${item.id}',this.checked)">非表示
+      </label>
+      <button class="btn-icon-edit" onclick="openSettingEditModal('${item.id}','shop')">✏️</button>
       <button class="btn-icon-del" onclick="deleteSettingItem('${item.id}','shop')">🗑️</button>
     </div>`;
   }).join('');
@@ -2658,6 +2706,47 @@ window.deleteSettingItem = (id, type) => {
   });
 };
 
+// 設定項目編集
+let editingSettingId = null;
+let editingSettingType = null;
+
+window.openSettingEditModal = (id, type) => {
+  const map = { category: 'categories', shop: 'shops' };
+  const item = settings[map[type]].find(x => x.id === id);
+  if (!item) return;
+  editingSettingId = id;
+  editingSettingType = type;
+  document.getElementById('editSettingName').value = item.name;
+  const groupSel = document.getElementById('editSettingGroupSel');
+  groupSel.innerHTML = '<option value="">カテゴリなし</option>';
+  const groups = type === 'category' ? settings.catGroups : settings.shopGroups;
+  groups.forEach(g => {
+    groupSel.innerHTML += `<option value="${g.id}"${item.groupId === g.id ? ' selected' : ''}>${g.name}</option>`;
+  });
+  openModal('settingEditModal');
+  setTimeout(() => document.getElementById('editSettingCancelBtn').focus(), 50);
+};
+
+window.saveSettingEdit = async () => {
+  const name = document.getElementById('editSettingName').value.trim();
+  if (!name || !editingSettingId) return;
+  const groupId = document.getElementById('editSettingGroupSel').value || null;
+  await updateDoc(doc(db, 'kakeibo_settings', editingSettingId), { name, groupId });
+  closeModal('settingEditModal');
+  editingSettingId = null;
+  editingSettingType = null;
+};
+
+// 非表示トグル
+window.toggleSettingHidden = async (id, hidden) => {
+  await updateDoc(doc(db, 'kakeibo_settings', id), { hidden });
+};
+
+// 削除デフォルト設定
+window.saveDeleteConfirmDefault = (val) => {
+  localStorage.setItem('deleteConfirmDefault', val);
+};
+
 window.moveSettingItem = async (type, i, delta) => {
   const map = {
     category:'categories', catGroup:'catGroups', incomeType:'incomeTypes',
@@ -2722,7 +2811,12 @@ function showConfirm(msg, cb, okLabel = '削除') {
   document.getElementById('confirmOkBtn').textContent = okLabel;
   confirmCallback = cb;
   document.getElementById('confirmOverlay').classList.add('open');
-  setTimeout(() => document.querySelector('#confirmOverlay .confirm-cancel').focus(), 50);
+  const defBtn = localStorage.getItem('deleteConfirmDefault') || 'cancel';
+  if (defBtn === 'ok') {
+    setTimeout(() => document.getElementById('confirmOkBtn').focus(), 50);
+  } else {
+    setTimeout(() => document.querySelector('#confirmOverlay .confirm-cancel').focus(), 50);
+  }
 }
 window.confirmOk = () => {
   document.getElementById('confirmOverlay').classList.remove('open');
@@ -2779,6 +2873,11 @@ function showToast(msg) {
 updateMonthLabel();
 await loadSettings();
 await loadMonthData();
+
+// 操作設定ラジオボタン初期化
+const _dcDef = localStorage.getItem('deleteConfirmDefault') || 'cancel';
+const _dcRadio = document.querySelector(`input[name="deleteConfirmDefault"][value="${_dcDef}"]`);
+if (_dcRadio) _dcRadio.checked = true;
 </script>
 </body>
 </html>
