@@ -1217,6 +1217,7 @@ let editingIncomeId = null;
 let editingFixedId = null;
 let editingCardPoolId = null;
 let editingCardFixedId = null;
+let editingCardFixedFromPool = false;
 let editingAccountTxId = null;
 let currentPayMethod = 'cash';
 let currentExpType = 'private';
@@ -1273,6 +1274,12 @@ window.switchTab = (tabName) => {
     selectedDate = null;
     window.selectedDate = null;
     document.getElementById('calDayPanel').classList.remove('open');
+  }
+  if (tabName === 'expenses') {
+    document.querySelectorAll('#expenseList .exp-day-header').forEach(h => {
+      h.classList.remove('open');
+      if (h.nextElementSibling) h.nextElementSibling.style.display = 'none';
+    });
   }
 };
 
@@ -1540,13 +1547,20 @@ function buildExpenseCard(e, showActions = true) {
 
   let breakdownHtml = '';
   if (e.breakdowns && e.breakdowns.length > 0) {
+    const normalBDs = e.breakdowns.filter(b => !b.isBad);
+    const badBDs = e.breakdowns.filter(b => b.isBad);
     breakdownHtml = '<div class="breakdown-display">';
-    e.breakdowns.forEach(b => {
-      const badStyle = b.isBad ? ' bad' : '';
-      const badge = b.isBad ? `<span style="font-size:9px;background:var(--bad);color:#fff;border-radius:3px;padding:1px 4px;margin-left:4px;">👿</span>` : '';
-      breakdownHtml += `<div class="breakdown-display-item${badStyle}">
-        <span>${b.name||'内訳'}${badge}${b.isBad&&b.badCategory?` <span style="font-size:9px;color:var(--bad);">${b.badCategory}</span>`:''}</span>
-        <span style="${b.isBad?'color:var(--bad);font-weight:700;':''}">¥${(b.amount||0).toLocaleString()}</span>
+    normalBDs.forEach(b => {
+      breakdownHtml += `<div class="breakdown-display-item">
+        <span>${b.name||'内訳'}</span>
+        <span>¥${(b.amount||0).toLocaleString()}</span>
+      </div>`;
+    });
+    badBDs.forEach(b => {
+      const badge = `<span style="font-size:9px;background:var(--bad);color:#fff;border-radius:3px;padding:1px 4px;margin-left:4px;">👿</span>`;
+      breakdownHtml += `<div class="breakdown-display-item bad">
+        <span>${b.name||'内訳'}${badge}${b.badCategory?` <span style="font-size:9px;color:var(--bad);">${b.badCategory}</span>`:''}</span>
+        <span style="color:var(--bad);font-weight:700;">¥${(b.amount||0).toLocaleString()}</span>
       </div>`;
     });
     breakdownHtml += '</div>';
@@ -1655,11 +1669,11 @@ function renderExpenseTab() {
     const dayTotal = dayItems.reduce((s,e) => s + (e.amount||0), 0);
     const count = dayItems.length;
     return `<div class="exp-day-section">
-      <div class="exp-day-header open" onclick="this.classList.toggle('open');this.nextElementSibling.style.display=this.classList.contains('open')?'block':'none';">
+      <div class="exp-day-header" onclick="this.classList.toggle('open');this.nextElementSibling.style.display=this.classList.contains('open')?'block':'none';">
         <span class="exp-day-title">${parseInt(m)}月${parseInt(d)}日（${count}件）</span>
         <span class="exp-day-total">合計 ¥${dayTotal.toLocaleString()}</span>
       </div>
-      <div class="exp-day-body">${dayItems.map(e => buildExpenseCompact(e)).join('')}</div>
+      <div class="exp-day-body" style="display:none;">${dayItems.map(e => buildExpenseCompact(e)).join('')}</div>
     </div>`;
   }).join('');
 }
@@ -1875,6 +1889,7 @@ function renderCardTab() {
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <div style="font-size:15px;font-weight:700;color:var(--card-color);">¥${(c.total||0).toLocaleString()}</div>
+          <button class="btn-edit" onclick="openCardFixedModal('${c.id}', ${c.fromPool||false})">✏️</button>
           <button class="btn-del" onclick="deleteCardConfirmed('${c.id}', ${c.fromPool||false})">🗑️</button>
         </div>
       </div>`;
@@ -1997,8 +2012,9 @@ window.deleteCardConfirmed = (id, fromPool) => {
   });
 };
 
-window.openCardFixedModal = (id = null) => {
+window.openCardFixedModal = (id = null, fromPool = false) => {
   editingCardFixedId = id;
+  editingCardFixedFromPool = fromPool;
   document.getElementById('cardFixedModalTitle').textContent = id ? '固定項目を編集' : '固定項目を追加';
   const ym = currentYM();
   document.getElementById('cf-month').value = ym;
@@ -2006,12 +2022,23 @@ window.openCardFixedModal = (id = null) => {
   document.getElementById('cf-memo').value = '';
   document.getElementById('cf-amount').value = '';
   if (id) {
-    const c = cardConfirmed.find(x => x.id === id);
-    if (c) {
-      document.getElementById('cf-month').value = c.month || ym;
-      document.getElementById('cf-cardId').value = c.cardId || '';
-      document.getElementById('cf-memo').value = c.memo || '';
-      document.getElementById('cf-amount').value = c.total || '';
+    if (fromPool) {
+      const c = cardPools.find(x => x.id === id);
+      if (c) {
+        document.getElementById('cf-month').value = c.confirmedMonth || ym;
+        document.getElementById('cf-cardId').value = c.cardId || '';
+        document.getElementById('cf-memo').value = c.memo || '';
+        document.getElementById('cf-amount').value =
+          c.installType === 'installment' ? (c.installAmt||0) : (c.amount||0);
+      }
+    } else {
+      const c = cardConfirmed.find(x => x.id === id);
+      if (c) {
+        document.getElementById('cf-month').value = c.month || ym;
+        document.getElementById('cf-cardId').value = c.cardId || '';
+        document.getElementById('cf-memo').value = c.memo || '';
+        document.getElementById('cf-amount').value = c.total || '';
+      }
     }
   }
   openModal('cardFixedModal');
@@ -2023,11 +2050,14 @@ window.saveCardFixed = async () => {
   const memo = document.getElementById('cf-memo').value.trim();
   const total = parseInt(document.getElementById('cf-amount').value) || 0;
   if (!month || !total) { alert('年月と金額は必須です'); return; }
-  const data = { month, cardId, memo, total };
   if (editingCardFixedId) {
-    await updateDoc(doc(db, 'card_confirmed', editingCardFixedId), data);
+    if (editingCardFixedFromPool) {
+      await updateDoc(doc(db, 'card_pools', editingCardFixedId), { confirmedMonth: month, cardId, memo });
+    } else {
+      await updateDoc(doc(db, 'card_confirmed', editingCardFixedId), { month, cardId, memo, total });
+    }
   } else {
-    await addDoc(collection(db, 'card_confirmed'), data);
+    await addDoc(collection(db, 'card_confirmed'), { month, cardId, memo, total });
   }
   closeModal('cardFixedModal');
   await loadMonthData();
@@ -2270,7 +2300,19 @@ window.saveExpense = async () => {
 
 window.deleteExpense = (id) => {
   showConfirm('この支出記録を削除しますか？', async () => {
+    const expense = expenses.find(x => x.id === id);
     await deleteDoc(doc(db, 'expenses', id));
+    if (expense && expense.payMethod === 'card' && expense.cardId) {
+      const linked = cardPools.filter(p =>
+        p.cardId === expense.cardId &&
+        p.date === expense.date &&
+        (p.amount||0) === (expense.amount||0) &&
+        !p.confirmedMonth
+      );
+      for (const p of linked) {
+        await deleteDoc(doc(db, 'card_pools', p.id));
+      }
+    }
     await loadMonthData();
   });
 };
@@ -2354,12 +2396,13 @@ window.saveIncome = async () => {
   if (editingIncomeId) {
     await updateDoc(doc(db, 'income', editingIncomeId), data);
   } else {
-    await addDoc(collection(db, 'income'), data);
+    const incRef = await addDoc(collection(db, 'income'), data);
     // 口座への反映
     if (accountId) {
       await addDoc(collection(db, 'account_txs'), {
         accountId, txType: 'transfer_in', amount: accountAmt, date,
-        memo: `収入：${settings.incomeTypes.find(t=>t.id===typeId)?.name||''}${memo?' / '+memo:''}`
+        memo: `収入：${settings.incomeTypes.find(t=>t.id===typeId)?.name||''}${memo?' / '+memo:''}`,
+        incomeId: incRef.id
       });
       showToast('口座残高に反映しました');
     }
@@ -2370,7 +2413,18 @@ window.saveIncome = async () => {
 
 window.deleteIncome = (id) => {
   showConfirm('この収入記録を削除しますか？', async () => {
+    const income = incomes.find(x => x.id === id);
     await deleteDoc(doc(db, 'income', id));
+    if (income && income.accountId) {
+      const linked = accountTxs.filter(t =>
+        t.incomeId === id ||
+        (t.accountId === income.accountId && t.txType === 'transfer_in' &&
+         t.date === income.date && (t.memo||'').startsWith('収入：'))
+      );
+      for (const t of linked) {
+        await deleteDoc(doc(db, 'account_txs', t.id));
+      }
+    }
     await loadMonthData();
   });
 };
