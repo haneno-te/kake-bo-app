@@ -751,13 +751,13 @@
       <span>費目（支出カテゴリ）</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
-      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">カテゴリ追加：</div>
+      <div style="font-size:11px;color:var(--income);margin-bottom:6px;">カテゴリ追加：</div>
       <div class="add-item-row add-item-row-group" style="margin-bottom:10px;">
         <input type="text" id="newCatGroupInput" placeholder="カテゴリ名（例：食費）">
         <button onclick="addCatGroup()">追加</button>
       </div>
       <div id="catGroupList" style="margin-bottom:8px;"></div>
-      <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">費目追加：</div>
+      <div style="font-size:11px;color:var(--accent);margin-bottom:4px;">費目追加：</div>
       <div class="add-item-row">
         <select id="newCategoryGroupSel" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;-webkit-appearance:none;">
           <option value="">カテゴリなし</option>
@@ -787,13 +787,13 @@
       <span>よく使うお店・場所</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
-      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">カテゴリ追加：</div>
+      <div style="font-size:11px;color:var(--income);margin-bottom:6px;">カテゴリ追加：</div>
       <div class="add-item-row add-item-row-group" style="margin-bottom:10px;">
         <input type="text" id="newShopGroupInput" placeholder="カテゴリ名（例：コンビニ）">
         <button onclick="addShopGroup()">追加</button>
       </div>
       <div id="shopGroupList" style="margin-bottom:8px;"></div>
-      <div style="font-size:11px;color:var(--text2);margin-bottom:4px;">お店追加：</div>
+      <div style="font-size:11px;color:var(--accent);margin-bottom:4px;">お店追加：</div>
       <div class="add-item-row">
         <select id="newShopGroupSel" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;-webkit-appearance:none;">
           <option value="">カテゴリなし</option>
@@ -2496,7 +2496,7 @@ function renderSettings() {
   const catGContainer = document.getElementById('catGroupList');
   catGContainer.innerHTML = settings.catGroups.map(g => `
     <div class="setting-item">
-      <div class="setting-item-name" style="color:var(--income);">📁 ${g.name}</div>
+      <div class="setting-item-name" style="color:var(--text);">📁 ${g.name}</div>
       <button class="btn-icon-del" onclick="deleteSettingItem('${g.id}','catGroup')">🗑️</button>
     </div>
   `).join('');
@@ -2522,7 +2522,7 @@ function renderSettings() {
   const shopGContainer = document.getElementById('shopGroupList');
   shopGContainer.innerHTML = settings.shopGroups.map(g => `
     <div class="setting-item">
-      <div class="setting-item-name" style="color:var(--income);">📁 ${g.name}</div>
+      <div class="setting-item-name" style="color:var(--text);">📁 ${g.name}</div>
       <button class="btn-icon-del" onclick="deleteSettingItem('${g.id}','shopGroup')">🗑️</button>
     </div>
   `).join('');
