@@ -2589,6 +2589,19 @@ window.saveAccountTx = async () => {
   const data = { accountId, txType: currentTxType, amount, date, memo };
   if (currentTxType === 'move') data.toAccountId = toAccountId;
   await addDoc(collection(db, 'account_txs'), data);
+  if (currentTxType === 'withdraw') {
+    const cashAcc = settings.accounts.find(a => a.name === '現金');
+    if (cashAcc) {
+      await addDoc(collection(db, 'account_txs'), {
+        accountId: cashAcc.id,
+        txType: 'deposit',
+        amount,
+        date,
+        memo: '引き下ろし（自動）'
+      });
+      showToast('現金口座に自動反映しました');
+    }
+  }
   closeModal('accountTxModal');
   await loadMonthData();
 };
