@@ -634,6 +634,12 @@
     <div style="font-size:13px;font-weight:700;">今月の支出</div>
     <button class="btn-sm accent" onclick="openExpenseModal()">＋ 追加</button>
   </div>
+  <div style="display:flex;gap:6px;margin-bottom:10px;">
+    <button class="type-btn active" id="expFilter-all" onclick="setExpFilter('all')">すべて</button>
+    <button class="type-btn" id="expFilter-work" onclick="setExpFilter('work')">仕事</button>
+    <button class="type-btn" id="expFilter-private" onclick="setExpFilter('private')">プライベート</button>
+    <button class="type-btn" id="expFilter-other" onclick="setExpFilter('other')">その他</button>
+  </div>
   <div id="expenseList"><div class="loading">データなし</div></div>
 </div>
 
@@ -718,14 +724,14 @@
   </div>
 
   <div class="card">
-    <div class="card-title">公私按分</div>
-    <div class="stat-row">
-      <span class="stat-label">仕事</span>
-      <span class="stat-value" id="statWork">¥0</span>
+    <div class="card-title">公私内訳</div>
+    <div class="stat-row" onclick="drillDownExpFilter('work')" style="cursor:pointer;">
+      <span class="stat-label">仕事 →</span>
+      <span class="stat-value" id="statWork" style="text-decoration:underline;">¥0</span>
     </div>
-    <div class="stat-row">
-      <span class="stat-label">プライベート</span>
-      <span class="stat-value" id="statPrivate">¥0</span>
+    <div class="stat-row" onclick="drillDownExpFilter('private')" style="cursor:pointer;">
+      <span class="stat-label">プライベート →</span>
+      <span class="stat-value" id="statPrivate" style="text-decoration:underline;">¥0</span>
     </div>
     <div class="progress-bar-wrap" style="margin-top:8px;">
       <div class="progress-bar-fill" id="workRatioBar" style="width:0%"></div>
@@ -910,6 +916,10 @@
         <button class="type-btn" onclick="setExpType('other')">その他</button>
       </div>
     </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--expense);cursor:pointer;margin-bottom:10px;">
+      <input type="checkbox" id="exp-noReceipt" style="accent-color:var(--expense);width:16px;height:16px;">
+      領収書なし（要確認）
+    </label>
     <div class="form-row">
       <label class="form-label">費目</label>
       <select class="form-select" id="exp-categoryId">
@@ -1263,6 +1273,7 @@ let editingCardPoolId = null;
 let editingCardFixedId = null;
 let editingCardFixedFromPool = false;
 let editingAccountTxId = null;
+let currentExpFilter = 'all';
 let currentPayMethod = 'cash';
 let currentExpType = 'private';
 let currentFixKind = 'private';
@@ -1606,6 +1617,7 @@ function renderDayPanel(dateStr) {
 
 function buildExpenseCard(e, showActions = true) {
   const catName = settings.categories.find(c => c.id === e.categoryId)?.name || '';
+  const noReceiptBadge = e.noReceipt ? `<span style="font-size:10px;color:var(--expense);background:rgba(255,107,107,0.15);border-radius:3px;padding:1px 5px;margin-left:4px;">領収書なし</span>` : '';
   const typeLabel = e.type === 'work' ? '仕事' : e.type === 'other' ? 'その他' : 'プライベート';
   const payLabel = e.payMethod === 'card' ? (settings.cards.find(c => c.id === e.cardId)?.name || 'カード') :
                    e.payMethod === 'transfer' ? (settings.accounts.find(a => a.id === e.accountId)?.name || '口座振込') : '現金';
@@ -1642,7 +1654,7 @@ function buildExpenseCard(e, showActions = true) {
       <div class="record-left">
         <div class="record-category">${catName}${catName?' · ':''}${typeLabel}</div>
         <div class="record-memo">${e.memo || '（メモなし）'}</div>
-        ${e.shop ? `<div class="record-sub">📍 ${e.shop}</div>` : ''}
+        ${e.shop ? `<div class="record-sub">📍 ${e.shop}${noReceiptBadge}</div>` : (noReceiptBadge ? `<div class="record-sub">${noReceiptBadge}</div>` : '')}
         <div><span class="pay-badge ${payBadgeClass}">${payLabel}</span></div>
         ${breakdownHtml}
       </div>
@@ -1722,9 +1734,10 @@ function renderSummaryBar() {
 // ===== 支出タブ =====
 function renderExpenseTab() {
   const list = document.getElementById('expenseList');
-  if (expenses.length === 0) { list.innerHTML = '<div class="loading">データなし</div>'; return; }
+  const filtered = currentExpFilter === 'all' ? expenses : expenses.filter(e => e.type === currentExpFilter);
+  if (filtered.length === 0) { list.innerHTML = '<div class="loading">データなし</div>'; return; }
   const grouped = {};
-  expenses.forEach(e => {
+  filtered.forEach(e => {
     if (!grouped[e.date]) grouped[e.date] = [];
     grouped[e.date].push(e);
   });
@@ -1776,12 +1789,13 @@ function buildExpenseCompact(e) {
   }
 
   const shopDisplay = e.shop || '（店名なし）';
+  const noReceiptBadge = e.noReceipt ? `<span style="font-size:10px;color:var(--expense);background:rgba(255,107,107,0.15);border-radius:3px;padding:1px 5px;margin-left:4px;">領収書なし</span>` : '';
   const row2Parts = [`<span class="pay-badge ${payBadgeClass}">${payLabel}</span>`, typeLabel];
   if (catName) row2Parts.push(catName);
 
   return `<div class="exp-item">
     <div class="exp-item-row1">
-      <span class="exp-item-shop">${hasBad ? '👿 ' : ''}${shopDisplay}</span>
+      <span class="exp-item-shop">${hasBad ? '👿 ' : ''}${shopDisplay}${noReceiptBadge}</span>
       <span class="exp-item-amount">¥${(e.amount||0).toLocaleString()}</span>
     </div>
     <div class="exp-item-row2">${row2Parts.join(' / ')}</div>
@@ -2239,7 +2253,7 @@ function renderSummary() {
   document.getElementById('statWork').textContent = '¥' + workExp.toLocaleString();
   document.getElementById('statPrivate').textContent = '¥' + privExp.toLocaleString();
   document.getElementById('workRatioBar').style.width = workRatio + '%';
-  document.getElementById('workRatioLabel').textContent = `仕事 ${workRatio}%`;
+  document.getElementById('workRatioLabel').textContent = `仕事 ${workRatio}% ／ プライベート ${100-workRatio}%`;
 
   const allBreakdowns = expenses.flatMap(e => (e.breakdowns||[]).filter(b => b.isBad));
   const totalBadAmt = allBreakdowns.reduce((s,b) => s + (b.amount||0), 0);
@@ -2284,6 +2298,7 @@ window.openExpenseModal = (id = null, date = null) => {
     if (e.payMethod === 'card') document.getElementById('exp-cardId').value = e.cardId || '';
     if (e.payMethod === 'transfer') document.getElementById('exp-accountId').value = e.accountId || '';
     setExpType(e.type || 'private');
+    document.getElementById('exp-noReceipt').checked = e.noReceipt || false;
     const bList = document.getElementById('expBreakdownList');
     bList.innerHTML = '';
     (e.breakdowns||[]).forEach(b => appendBreakdownRow(b));
@@ -2298,6 +2313,7 @@ window.openExpenseModal = (id = null, date = null) => {
     document.getElementById('expBreakdownList').innerHTML = '';
     setPayMethod('cash');
     setExpType('private');
+    document.getElementById('exp-noReceipt').checked = false;
   }
   openModal('expenseModal');
   setTimeout(() => document.getElementById('exp-amount').focus(), 300);
@@ -2324,9 +2340,10 @@ window.saveExpense = async () => {
     if (name || amt) breakdowns.push({ name, amount: amt, isBad, badCategory });
   });
 
+  const noReceipt = document.getElementById('exp-noReceipt').checked;
   const data = {
     date, amount, categoryId, shop, memo,
-    type: currentExpType, payMethod: currentPayMethod, breakdowns
+    type: currentExpType, payMethod: currentPayMethod, breakdowns, noReceipt
   };
   if (currentPayMethod === 'card') data.cardId = document.getElementById('exp-cardId').value;
   if (currentPayMethod === 'transfer') data.accountId = document.getElementById('exp-accountId').value;
@@ -2917,6 +2934,25 @@ window.setCpInstall = (type) => {
     btn.classList.toggle('active', ['once','installment'][i] === type);
   });
   document.getElementById('cpInstallWrap').style.display = type === 'installment' ? 'block' : 'none';
+};
+
+window.setExpFilter = (filter) => {
+  currentExpFilter = filter;
+  ['all','work','private','other'].forEach(f => {
+    const btn = document.getElementById('expFilter-' + f);
+    if (btn) btn.classList.toggle('active', f === filter);
+  });
+  renderExpenseTab();
+};
+
+window.drillDownExpFilter = (filter) => {
+  switchTab('expenses');
+  currentExpFilter = filter;
+  ['all','work','private','other'].forEach(f => {
+    const btn = document.getElementById('expFilter-' + f);
+    if (btn) btn.classList.toggle('active', f === filter);
+  });
+  renderExpenseTab();
 };
 
 // ===== モーダル共通 =====
