@@ -709,6 +709,10 @@
       <span class="stat-label">支出合計（日々）</span>
       <span class="stat-value" style="color:var(--expense);" id="statExpense">¥0</span>
     </div>
+    <div class="stat-row" id="statFeeRow">
+      <span class="stat-label" style="padding-left:8px;font-size:11px;">うち銀行手数料</span>
+      <span class="stat-value" style="color:var(--bad);font-size:11px;" id="statFee">¥0</span>
+    </div>
     <div class="stat-row">
       <span class="stat-label">カード引き落とし確定</span>
       <span class="stat-value" style="color:var(--expense);" id="statCard">¥0</span>
@@ -1027,6 +1031,10 @@
       <label class="form-label">メモ（任意）</label>
       <input type="text" class="form-input" id="tx-memo" placeholder="">
     </div>
+    <div class="form-row" id="txFeeWrap" style="display:none;">
+      <label class="form-label">手数料（円）</label>
+      <input type="number" class="form-input" id="tx-fee" placeholder="0（任意）" inputmode="numeric">
+    </div>
     <button class="btn-primary" onclick="saveAccountTx()">保存</button>
     <button class="btn-secondary" onclick="closeModal('accountTxModal')">キャンセル</button>
   </div>
@@ -1190,6 +1198,28 @@
         <button class="type-btn" onclick="setFixKind('work')" id="fkWork">仕事</button>
       </div>
     </div>
+    <div class="form-row">
+      <label class="form-label">支払い日（任意）</label>
+      <input type="number" class="form-input" id="fix-payDay" placeholder="1〜31" inputmode="numeric" min="1" max="31">
+    </div>
+    <div class="form-row">
+      <label class="form-label">支払い方法（任意）</label>
+      <div class="type-selector" id="fixPayMethodSelector">
+        <button class="type-btn" onclick="setFixPayMethod('cash')">現金</button>
+        <button class="type-btn" onclick="setFixPayMethod('card')">カード</button>
+        <button class="type-btn" onclick="setFixPayMethod('transfer')">口座振込</button>
+      </div>
+      <div id="fixPayCardWrap" style="display:none;margin-top:6px;">
+        <select class="form-select" id="fix-payCardId">
+          <option value="">-- カードを選択 --</option>
+        </select>
+      </div>
+      <div id="fixPayAccountWrap" style="display:none;margin-top:6px;">
+        <select class="form-select" id="fix-payAccountId">
+          <option value="">-- 口座を選択 --</option>
+        </select>
+      </div>
+    </div>
     <button class="btn-primary" onclick="saveFixed()">保存</button>
     <button class="btn-secondary" onclick="closeModal('fixedModal')">キャンセル</button>
   </div>
@@ -1279,6 +1309,7 @@ let currentExpType = 'private';
 let currentFixKind = 'private';
 let currentTxType = 'deposit';
 let currentCpInstall = 'once';
+let currentFixPayMethod = null;
 let confirmCallback = null;
 let isComposing = false;
 let adjustAccountId = null;
@@ -1447,6 +1478,18 @@ function populateSelects() {
     sel.innerHTML = '<option value="">-- 口座を選択 --</option>';
     settings.accounts.forEach(a => { sel.innerHTML += `<option value="${a.id}">${a.name}</option>`; });
   });
+
+  // 固定費支払い方法カード・口座
+  const fixCardSel = document.getElementById('fix-payCardId');
+  if (fixCardSel) {
+    fixCardSel.innerHTML = '<option value="">-- カードを選択 --</option>';
+    settings.cards.forEach(c => { fixCardSel.innerHTML += `<option value="${c.id}">${c.name}</option>`; });
+  }
+  const fixAccSel = document.getElementById('fix-payAccountId');
+  if (fixAccSel) {
+    fixAccSel.innerHTML = '<option value="">-- 口座を選択 --</option>';
+    settings.accounts.forEach(a => { fixAccSel.innerHTML += `<option value="${a.id}">${a.name}</option>`; });
+  }
 }
 
 function populateBadCategorySel(sel) {
@@ -1548,6 +1591,7 @@ function renderCalendar() {
     let dots = '';
     if (hasBad) dots += `<span class="cal-dot" style="background:var(--bad);"></span>`;
     if (hasAccTx) dots += `<span class="cal-dot" style="background:var(--accent);"></span>`;
+    if (fixedCosts.some(f => f.payDay === d)) dots += `<span class="cal-dot" style="background:var(--expense);"></span>`;
 
     html += `<div class="${cls}" onclick="selectDate('${dateStr}')">
       <span class="cal-date">${d}</span>
@@ -1653,8 +1697,8 @@ function buildExpenseCard(e, showActions = true) {
     <div class="record-top">
       <div class="record-left">
         <div class="record-category">${catName}${catName?' · ':''}${typeLabel}</div>
-        <div class="record-memo">${e.memo || '（メモなし）'}</div>
-        ${e.shop ? `<div class="record-sub">📍 ${e.shop}${noReceiptBadge}</div>` : (noReceiptBadge ? `<div class="record-sub">${noReceiptBadge}</div>` : '')}
+        <div class="record-memo">${e.shop || e.memo || '（メモなし）'}</div>
+        ${(e.shop && e.memo) ? `<div class="record-sub">${e.memo}${noReceiptBadge}</div>` : (noReceiptBadge ? `<div class="record-sub">${noReceiptBadge}</div>` : '')}
         <div><span class="pay-badge ${payBadgeClass}">${payLabel}</span></div>
         ${breakdownHtml}
       </div>
@@ -1788,7 +1832,7 @@ function buildExpenseCompact(e) {
     breakdownHtml += '</div>';
   }
 
-  const shopDisplay = e.shop || '（店名なし）';
+  const shopDisplay = e.shop || e.memo || '（店名なし）';
   const noReceiptBadge = e.noReceipt ? `<span style="font-size:10px;color:var(--expense);background:rgba(255,107,107,0.15);border-radius:3px;padding:1px 5px;margin-left:4px;">領収書なし</span>` : '';
   const row2Parts = [`<span class="pay-badge ${payBadgeClass}">${payLabel}</span>`, typeLabel];
   if (catName) row2Parts.push(catName);
@@ -1800,7 +1844,7 @@ function buildExpenseCompact(e) {
     </div>
     <div class="exp-item-row2">${row2Parts.join(' / ')}</div>
     <div class="exp-item-row3">
-      <span class="exp-item-memo">${e.memo || ''}</span>
+      <span class="exp-item-memo">${(e.shop && e.memo) ? e.memo : ''}</span>
       <span class="exp-item-actions">
         <button class="btn-edit" onclick="openExpenseModal('${e.id}')">✏️</button>
         <button class="btn-del" onclick="deleteExpense('${e.id}')">🗑️</button>
@@ -2157,6 +2201,11 @@ function renderFixedTab() {
     total += amount;
     const typeLabel = f.fixedType === 'fixed' ? '完全固定' : '変動あり';
     const kindLabel = f.kind === 'work' ? '仕事' : 'プライベート';
+    const payDayLabel = f.payDay ? `毎月${f.payDay}日` : '';
+    const payMethodLabel = f.payMethod === 'cash' ? '現金' :
+      f.payMethod === 'card' ? `カード${f.payCardId ? '（' + (settings.cards.find(c => c.id === f.payCardId)?.name || '') + '）' : ''}` :
+      f.payMethod === 'transfer' ? `口座振込${f.payAccountId ? '（' + (settings.accounts.find(a => a.id === f.payAccountId)?.name || '') + '）' : ''}` : '';
+    const payInfo = [payDayLabel, payMethodLabel].filter(Boolean).join(' / ');
     return `<div class="fixed-item">
       <div style="display:flex;flex-direction:column;gap:2px;margin-right:6px;">
         <button class="btn-order" onclick="moveFixed(${i},-1)">▲</button>
@@ -2165,6 +2214,7 @@ function renderFixedTab() {
       <div class="fixed-item-left">
         <div class="fixed-item-name">${f.name}</div>
         <div class="fixed-item-type">${typeLabel} · ${kindLabel}</div>
+        ${payInfo ? `<div class="fixed-item-type" style="color:var(--accent);margin-top:1px;">${payInfo}</div>` : ''}
       </div>
       <div class="fixed-item-amount">¥${amount.toLocaleString()}</div>
       <button class="btn-icon-edit" onclick="openFixedModal('${f.id}')">✏️</button>
@@ -2185,6 +2235,17 @@ window.openFixedModal = (id = null) => {
       document.getElementById('fix-actual').value = f.actualAmount || '';
       document.getElementById('fix-type').value = f.fixedType || 'fixed';
       setFixKind(f.kind || 'private');
+      document.getElementById('fix-payDay').value = f.payDay || '';
+      if (f.payMethod) {
+        setFixPayMethod(f.payMethod);
+        if (f.payMethod === 'card') document.getElementById('fix-payCardId').value = f.payCardId || '';
+        if (f.payMethod === 'transfer') document.getElementById('fix-payAccountId').value = f.payAccountId || '';
+      } else {
+        currentFixPayMethod = null;
+        document.querySelectorAll('#fixPayMethodSelector .type-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('fixPayCardWrap').style.display = 'none';
+        document.getElementById('fixPayAccountWrap').style.display = 'none';
+      }
     }
   } else {
     document.getElementById('fix-name').value = '';
@@ -2192,6 +2253,11 @@ window.openFixedModal = (id = null) => {
     document.getElementById('fix-actual').value = '';
     document.getElementById('fix-type').value = 'fixed';
     setFixKind('private');
+    document.getElementById('fix-payDay').value = '';
+    currentFixPayMethod = null;
+    document.querySelectorAll('#fixPayMethodSelector .type-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('fixPayCardWrap').style.display = 'none';
+    document.getElementById('fixPayAccountWrap').style.display = 'none';
   }
   openModal('fixedModal');
 };
@@ -2202,7 +2268,11 @@ window.saveFixed = async () => {
   const actualAmount = parseInt(document.getElementById('fix-actual').value) || null;
   const fixedType = document.getElementById('fix-type').value;
   if (!name) { alert('項目名は必須です'); return; }
-  const data = { name, amount, actualAmount, fixedType, kind: currentFixKind };
+  const payDay = parseInt(document.getElementById('fix-payDay').value) || null;
+  const payMethod = currentFixPayMethod || null;
+  const payCardId = payMethod === 'card' ? (document.getElementById('fix-payCardId').value || null) : null;
+  const payAccountId = payMethod === 'transfer' ? (document.getElementById('fix-payAccountId').value || null) : null;
+  const data = { name, amount, actualAmount, fixedType, kind: currentFixKind, payDay, payMethod, payCardId, payAccountId };
   if (editingFixedId) {
     await updateDoc(doc(db, 'fixed_costs', editingFixedId), data);
   } else {
@@ -2239,8 +2309,11 @@ function renderSummary() {
   const totalFixed = fixedCosts.reduce((s,f) => s + (f.actualAmount || f.amount || 0), 0);
   const balance = totalInc - totalExp - totalCard - totalFixed;
 
+  const totalFee = expenses.filter(e => e.memo === '銀行手数料').reduce((s,e) => s + (e.amount||0), 0);
   document.getElementById('statIncome').textContent = '¥' + totalInc.toLocaleString();
   document.getElementById('statExpense').textContent = '¥' + totalExp.toLocaleString();
+  document.getElementById('statFee').textContent = '¥' + totalFee.toLocaleString();
+  document.getElementById('statFeeRow').style.display = totalFee > 0 ? 'flex' : 'none';
   document.getElementById('statCard').textContent = '¥' + totalCard.toLocaleString();
   document.getElementById('statFixed').textContent = '¥' + totalFixed.toLocaleString();
   const balEl = document.getElementById('statBalance');
@@ -2589,6 +2662,7 @@ window.openAccountTxModal = (id = null, date = null, accountId = null, txType = 
   document.getElementById('tx-date').value = date || todayStr();
   document.getElementById('tx-amount').value = '';
   document.getElementById('tx-memo').value = '';
+  document.getElementById('tx-fee').value = '';
   document.getElementById('tx-accountId').value = accountId || '';
   setTxType(txType || 'deposit');
   openModal('accountTxModal');
@@ -2601,6 +2675,7 @@ window.saveAccountTx = async () => {
   const date = document.getElementById('tx-date').value;
   const memo = document.getElementById('tx-memo').value.trim();
   const toAccountId = document.getElementById('tx-toAccountId').value;
+  const feeAmt = parseInt(document.getElementById('tx-fee').value) || 0;
   if (!accountId || !amount || !date) { alert('口座・金額・日付は必須です'); return; }
   if (currentTxType === 'move' && !toAccountId) { alert('移動先口座を選択してください'); return; }
   const data = { accountId, txType: currentTxType, amount, date, memo };
@@ -2618,6 +2693,16 @@ window.saveAccountTx = async () => {
       });
       showToast('現金口座に自動反映しました');
     }
+  }
+  if (feeAmt > 0 && (currentTxType === 'transfer_out' || currentTxType === 'withdraw')) {
+    await addDoc(collection(db, 'account_txs'), {
+      accountId, txType: 'transfer_out', amount: feeAmt, date, memo: '手数料'
+    });
+    await addDoc(collection(db, 'expenses'), {
+      date, amount: feeAmt, categoryId: '', shop: '', memo: '銀行手数料',
+      type: 'other', payMethod: 'transfer', accountId, breakdowns: [], noReceipt: false
+    });
+    showToast(`手数料 ¥${feeAmt.toLocaleString()} を記録しました`);
   }
   closeModal('accountTxModal');
   await loadMonthData();
@@ -2918,12 +3003,22 @@ window.setFixKind = (kind) => {
   document.getElementById('fkWork').classList.toggle('active', kind === 'work');
 };
 
+window.setFixPayMethod = (method) => {
+  currentFixPayMethod = method;
+  document.querySelectorAll('#fixPayMethodSelector .type-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', ['cash','card','transfer'][i] === method);
+  });
+  document.getElementById('fixPayCardWrap').style.display = method === 'card' ? 'block' : 'none';
+  document.getElementById('fixPayAccountWrap').style.display = method === 'transfer' ? 'block' : 'none';
+};
+
 window.setTxType = (type) => {
   currentTxType = type;
   document.querySelectorAll('#txTypeSelector .type-btn').forEach((btn, i) => {
     btn.classList.toggle('active', ['deposit','withdraw','transfer_in','transfer_out','move'][i] === type);
   });
   document.getElementById('txToAccountWrap').style.display = type === 'move' ? 'block' : 'none';
+  document.getElementById('txFeeWrap').style.display = (type === 'transfer_out' || type === 'withdraw') ? 'block' : 'none';
   const labels = { deposit:'入金先口座', withdraw:'出金元口座', transfer_in:'入金先口座', transfer_out:'出金元口座', move:'出金元口座' };
   document.getElementById('txAccountLabel').textContent = labels[type] || '口座';
 };
