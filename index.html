@@ -562,6 +562,58 @@
     box-shadow: 0 4px 16px rgba(108,143,255,0.4);
     display: flex; align-items: center; justify-content: center;
   }
+
+  /* 電卓UI */
+  .calc-display {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 4px;
+    background: var(--surface2);
+    min-height: 54px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .calc-result {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text);
+    font-family: monospace;
+  }
+  .calc-result.zero { color: var(--text2); }
+  .calc-expr {
+    font-size: 11px;
+    color: var(--text2);
+    font-family: monospace;
+    min-height: 14px;
+    margin-top: 2px;
+  }
+  .calc-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin: 8px 0 10px;
+  }
+  .calc-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    text-align: center;
+  }
+  .calc-btn.op {
+    background: rgba(108,143,255,0.12);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .calc-btn.del { color: var(--expense); }
+  .calc-btn.span2 { grid-column: span 2; }
+  .calc-btn.span3 { grid-column: span 3; font-size: 12px; color: var(--text2); }
 </style>
 </head>
 <body>
@@ -888,7 +940,29 @@
     </div>
     <div class="form-row">
       <label class="form-label">金額（円）</label>
-      <input type="number" class="form-input" id="exp-amount" placeholder="0" inputmode="numeric">
+      <div class="calc-display">
+        <div class="calc-result zero" id="exp-calcResult">0</div>
+        <div class="calc-expr" id="exp-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('exp','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('exp','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('exp','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('exp','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('exp','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('exp','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('exp','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('exp','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('exp','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('exp','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('exp','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('exp','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('exp','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('exp','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('exp','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('exp')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('exp')">⌫</button>
+      </div>
     </div>
     <div class="form-row">
       <label class="form-label">日付</label>
@@ -963,7 +1037,29 @@
     </div>
     <div class="form-row">
       <label class="form-label">金額（円）</label>
-      <input type="number" class="form-input" id="inc-amount" placeholder="0" inputmode="numeric">
+      <div class="calc-display">
+        <div class="calc-result zero" id="inc-calcResult">0</div>
+        <div class="calc-expr" id="inc-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('inc','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('inc','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('inc','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('inc','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('inc','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('inc','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('inc','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('inc','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('inc','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('inc','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('inc','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('inc','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('inc','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('inc','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('inc','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('inc')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('inc')">⌫</button>
+      </div>
     </div>
     <div class="form-row">
       <label class="form-label">日付</label>
@@ -1021,7 +1117,29 @@
     </div>
     <div class="form-row">
       <label class="form-label">金額（円）</label>
-      <input type="number" class="form-input" id="tx-amount" placeholder="0" inputmode="numeric">
+      <div class="calc-display">
+        <div class="calc-result zero" id="tx-calcResult">0</div>
+        <div class="calc-expr" id="tx-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('tx','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('tx','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('tx','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('tx','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('tx','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('tx','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('tx','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('tx','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('tx','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('tx','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('tx','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('tx','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('tx','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('tx','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('tx','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('tx')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('tx')">⌫</button>
+      </div>
     </div>
     <div class="form-row">
       <label class="form-label">日付</label>
@@ -1033,7 +1151,29 @@
     </div>
     <div class="form-row" id="txFeeWrap" style="display:none;">
       <label class="form-label">手数料（円）</label>
-      <input type="number" class="form-input" id="tx-fee" placeholder="0（任意）" inputmode="numeric">
+      <div class="calc-display">
+        <div class="calc-result zero" id="txfee-calcResult">0</div>
+        <div class="calc-expr" id="txfee-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('txfee','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('txfee','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('txfee','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('txfee','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('txfee','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('txfee','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('txfee','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('txfee','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('txfee','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('txfee','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('txfee','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('txfee','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('txfee','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('txfee','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('txfee','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('txfee')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('txfee')">⌫</button>
+      </div>
     </div>
     <button class="btn-primary" onclick="saveAccountTx()">保存</button>
     <button class="btn-secondary" onclick="closeModal('accountTxModal')">キャンセル</button>
@@ -1056,7 +1196,29 @@
     </div>
     <div class="form-row">
       <label class="form-label">実際の残高（円）</label>
-      <input type="number" class="form-input" id="adjust-actual" placeholder="0" inputmode="numeric">
+      <div class="calc-display">
+        <div class="calc-result zero" id="adj-calcResult">0</div>
+        <div class="calc-expr" id="adj-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('adj','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('adj','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('adj','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('adj','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('adj','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('adj','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('adj','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('adj','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('adj','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('adj','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('adj','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('adj','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('adj','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('adj','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('adj','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('adj')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('adj')">⌫</button>
+      </div>
     </div>
     <div class="form-row">
       <label class="form-label">日付</label>
@@ -1076,7 +1238,29 @@
     </div>
     <div class="form-row">
       <label class="form-label">金額（円）</label>
-      <input type="number" class="form-input" id="cp-amount" placeholder="0" inputmode="numeric">
+      <div class="calc-display">
+        <div class="calc-result zero" id="cp-calcResult">0</div>
+        <div class="calc-expr" id="cp-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('cp','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('cp','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('cp','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('cp','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('cp','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('cp','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('cp','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('cp','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('cp','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('cp','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('cp','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('cp','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('cp','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('cp','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('cp','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('cp')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('cp')">⌫</button>
+      </div>
     </div>
     <div class="form-row">
       <label class="form-label">購入日</label>
@@ -1106,7 +1290,29 @@
       </div>
       <div class="form-row">
         <label class="form-label">1回あたりの支払額（円）</label>
-        <input type="number" class="form-input" id="cp-installAmt" placeholder="0" inputmode="numeric">
+        <div class="calc-display">
+          <div class="calc-result zero" id="cpinst-calcResult">0</div>
+          <div class="calc-expr" id="cpinst-calcExpr"></div>
+        </div>
+        <div class="calc-grid">
+          <button class="calc-btn" onclick="calcPress('cpinst','7')">7</button>
+          <button class="calc-btn" onclick="calcPress('cpinst','8')">8</button>
+          <button class="calc-btn" onclick="calcPress('cpinst','9')">9</button>
+          <button class="calc-btn op" onclick="calcPress('cpinst','+')">＋</button>
+          <button class="calc-btn" onclick="calcPress('cpinst','4')">4</button>
+          <button class="calc-btn" onclick="calcPress('cpinst','5')">5</button>
+          <button class="calc-btn" onclick="calcPress('cpinst','6')">6</button>
+          <button class="calc-btn op" onclick="calcPress('cpinst','-')">－</button>
+          <button class="calc-btn" onclick="calcPress('cpinst','1')">1</button>
+          <button class="calc-btn" onclick="calcPress('cpinst','2')">2</button>
+          <button class="calc-btn" onclick="calcPress('cpinst','3')">3</button>
+          <button class="calc-btn op" onclick="calcPress('cpinst','*')">×</button>
+          <button class="calc-btn span2" onclick="calcPress('cpinst','0')">0</button>
+          <button class="calc-btn" onclick="calcPress('cpinst','00')">00</button>
+          <button class="calc-btn op" onclick="calcPress('cpinst','/')">÷</button>
+          <button class="calc-btn span3" onclick="calcClr('cpinst')">クリア</button>
+          <button class="calc-btn del" onclick="calcDel('cpinst')">⌫</button>
+        </div>
       </div>
     </div>
     <button class="btn-primary" onclick="saveCardPool()">プールに追加</button>
@@ -1185,11 +1391,55 @@
     </div>
     <div class="form-row">
       <label class="form-label">金額（円）</label>
-      <input type="number" class="form-input" id="fix-amount" placeholder="0" inputmode="numeric">
+      <div class="calc-display">
+        <div class="calc-result zero" id="fix-calcResult">0</div>
+        <div class="calc-expr" id="fix-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('fix','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('fix','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('fix','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('fix','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('fix','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('fix','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('fix','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('fix','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('fix','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('fix','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('fix','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('fix','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('fix','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('fix','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('fix','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('fix')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('fix')">⌫</button>
+      </div>
     </div>
     <div class="form-row">
       <label class="form-label">今月の実績額（変動の場合）</label>
-      <input type="number" class="form-input" id="fix-actual" placeholder="未入力なら基本額を使用" inputmode="numeric">
+      <div class="calc-display">
+        <div class="calc-result zero" id="fixact-calcResult">0</div>
+        <div class="calc-expr" id="fixact-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('fixact','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('fixact','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('fixact','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('fixact','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('fixact','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('fixact','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('fixact','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('fixact','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('fixact','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('fixact','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('fixact','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('fixact','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('fixact','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('fixact','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('fixact','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('fixact')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('fixact')">⌫</button>
+      </div>
     </div>
     <div class="form-row">
       <label class="form-label">種別（公私）</label>
@@ -1244,6 +1494,51 @@
     </div>
     <button class="btn-primary" onclick="saveSettingEdit()">保存</button>
     <button class="btn-secondary" id="editSettingCancelBtn" onclick="closeModal('settingEditModal')">キャンセル</button>
+  </div>
+</div>
+
+<!-- 初期残高設定モーダル -->
+<div class="modal-overlay" id="initBalModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <div class="modal-title" id="initBalModalTitle">初期残高を設定</div>
+      <button class="modal-close" onclick="closeModal('initBalModal')">×</button>
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">
+      口座管理を始める起点の残高を入力してください。
+    </div>
+    <div class="form-row">
+      <label class="form-label">起点日</label>
+      <input type="date" class="form-input" id="initBal-date">
+    </div>
+    <div class="form-row">
+      <label class="form-label">初期残高（円）</label>
+      <div class="calc-display">
+        <div class="calc-result zero" id="initBal-calcResult">0</div>
+        <div class="calc-expr" id="initBal-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('initBal','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('initBal','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('initBal','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('initBal','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('initBal','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('initBal','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('initBal','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('initBal','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('initBal','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('initBal','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('initBal','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('initBal','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('initBal','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('initBal','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('initBal','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('initBal')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('initBal')">⌫</button>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="saveInitBal()">保存</button>
+    <button class="btn-secondary" onclick="closeModal('initBalModal')">キャンセル</button>
   </div>
 </div>
 
@@ -1311,6 +1606,67 @@ let currentTxType = 'deposit';
 let currentCpInstall = 'once';
 let currentFixPayMethod = null;
 let confirmCallback = null;
+
+// ===== 電卓 =====
+const calcState = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', cp:'', cpinst:'', adj:'', initBal:'' };
+
+function calcEval(expr) {
+  try {
+    const r = Function('"use strict"; return (' + expr + ')')();
+    return (typeof r === 'number' && isFinite(r)) ? Math.round(r) : null;
+  } catch(e) { return null; }
+}
+
+function calcUpdate(prefix) {
+  const expr = calcState[prefix];
+  const resultEl = document.getElementById(prefix + '-calcResult');
+  const exprEl = document.getElementById(prefix + '-calcExpr');
+  if (!resultEl) return;
+  if (!expr) {
+    resultEl.textContent = '0';
+    resultEl.className = 'calc-result zero';
+    exprEl.textContent = '';
+    return;
+  }
+  const r = calcEval(expr);
+  const hasOp = /[+\-*\/]/.test(expr);
+  if (r !== null) {
+    resultEl.textContent = r.toLocaleString();
+    resultEl.className = 'calc-result';
+    exprEl.textContent = hasOp ? expr.replace(/\*/g,'×').replace(/\//g,'÷') : '';
+  } else {
+    resultEl.textContent = expr;
+    resultEl.className = 'calc-result';
+    exprEl.textContent = '';
+  }
+}
+
+function calcGetValue(prefix) {
+  const expr = calcState[prefix];
+  const r = calcEval(expr);
+  return r !== null ? r : (parseInt(expr) || 0);
+}
+
+window.calcPress = (prefix, key) => {
+  const state = calcState[prefix];
+  const ops = ['+','-','*','/'];
+  if (ops.includes(key) && ops.includes(state.slice(-1))) {
+    calcState[prefix] = state.slice(0,-1) + key;
+  } else {
+    calcState[prefix] += key;
+  }
+  calcUpdate(prefix);
+};
+
+window.calcDel = (prefix) => {
+  calcState[prefix] = calcState[prefix].slice(0,-1);
+  calcUpdate(prefix);
+};
+
+window.calcClr = (prefix) => {
+  calcState[prefix] = '';
+  calcUpdate(prefix);
+};
 let isComposing = false;
 let adjustAccountId = null;
 let cardConfirmTargetId = null;
@@ -2077,18 +2433,19 @@ window.openCardPoolModal = (id = null) => {
   if (id) {
     const c = cardPools.find(x => x.id === id);
     if (c) {
-      document.getElementById('cp-amount').value = c.amount || '';
+      calcState['cp'] = String(c.amount || ''); calcUpdate('cp');
       document.getElementById('cp-date').value = c.date || todayStr();
       document.getElementById('cp-cardId').value = c.cardId || '';
       document.getElementById('cp-memo').value = c.memo || '';
       setCpInstall(c.installType || 'once');
       if (c.installType === 'installment') {
         document.getElementById('cp-installCount').value = c.installCount || '';
-        document.getElementById('cp-installAmt').value = c.installAmt || '';
+        calcState['cpinst'] = String(c.installAmt || ''); calcUpdate('cpinst');
       }
     }
   } else {
-    document.getElementById('cp-amount').value = '';
+    calcState['cp'] = ''; calcUpdate('cp');
+    calcState['cpinst'] = ''; calcUpdate('cpinst');
     document.getElementById('cp-date').value = todayStr();
     document.getElementById('cp-cardId').value = '';
     document.getElementById('cp-memo').value = '';
@@ -2098,7 +2455,7 @@ window.openCardPoolModal = (id = null) => {
 };
 
 window.saveCardPool = async () => {
-  const amount = parseInt(document.getElementById('cp-amount').value) || 0;
+  const amount = calcGetValue('cp');
   const date = document.getElementById('cp-date').value;
   const cardId = document.getElementById('cp-cardId').value;
   const memo = document.getElementById('cp-memo').value.trim();
@@ -2106,7 +2463,7 @@ window.saveCardPool = async () => {
   const data = { amount, date, cardId, memo, installType: currentCpInstall };
   if (currentCpInstall === 'installment') {
     data.installCount = parseInt(document.getElementById('cp-installCount').value) || 0;
-    data.installAmt = parseInt(document.getElementById('cp-installAmt').value) || 0;
+    data.installAmt = calcGetValue('cpinst');
     data.remainCount = data.installCount;
   }
   if (editingCardPoolId) {
@@ -2231,8 +2588,8 @@ window.openFixedModal = (id = null) => {
     const f = fixedCosts.find(x => x.id === id);
     if (f) {
       document.getElementById('fix-name').value = f.name || '';
-      document.getElementById('fix-amount').value = f.amount || '';
-      document.getElementById('fix-actual').value = f.actualAmount || '';
+      calcState['fix'] = String(f.amount || ''); calcUpdate('fix');
+      calcState['fixact'] = String(f.actualAmount || ''); calcUpdate('fixact');
       document.getElementById('fix-type').value = f.fixedType || 'fixed';
       setFixKind(f.kind || 'private');
       document.getElementById('fix-payDay').value = f.payDay || '';
@@ -2249,8 +2606,8 @@ window.openFixedModal = (id = null) => {
     }
   } else {
     document.getElementById('fix-name').value = '';
-    document.getElementById('fix-amount').value = '';
-    document.getElementById('fix-actual').value = '';
+    calcState['fix'] = ''; calcUpdate('fix');
+    calcState['fixact'] = ''; calcUpdate('fixact');
     document.getElementById('fix-type').value = 'fixed';
     setFixKind('private');
     document.getElementById('fix-payDay').value = '';
@@ -2264,8 +2621,8 @@ window.openFixedModal = (id = null) => {
 
 window.saveFixed = async () => {
   const name = document.getElementById('fix-name').value.trim();
-  const amount = parseInt(document.getElementById('fix-amount').value) || 0;
-  const actualAmount = parseInt(document.getElementById('fix-actual').value) || null;
+  const amount = calcGetValue('fix');
+  const actualAmount = calcGetValue('fixact') || null;
   const fixedType = document.getElementById('fix-type').value;
   if (!name) { alert('項目名は必須です'); return; }
   const payDay = parseInt(document.getElementById('fix-payDay').value) || null;
@@ -2360,7 +2717,7 @@ window.openExpenseModal = (id = null, date = null) => {
   if (id) {
     const e = expenses.find(x => x.id === id);
     if (!e) return;
-    document.getElementById('exp-amount').value = e.amount || '';
+    calcState['exp'] = String(e.amount || ''); calcUpdate('exp');
     document.getElementById('exp-date').value = e.date || todayStr();
     document.getElementById('exp-categoryId').value = e.categoryId || '';
     document.getElementById('exp-shop').value = e.shop || '';
@@ -2376,7 +2733,7 @@ window.openExpenseModal = (id = null, date = null) => {
     bList.innerHTML = '';
     (e.breakdowns||[]).forEach(b => appendBreakdownRow(b));
   } else {
-    document.getElementById('exp-amount').value = '';
+    calcState['exp'] = ''; calcUpdate('exp');
     document.getElementById('exp-date').value = date || todayStr();
     document.getElementById('exp-categoryId').value = '';
     document.getElementById('exp-shop').value = '';
@@ -2389,11 +2746,10 @@ window.openExpenseModal = (id = null, date = null) => {
     document.getElementById('exp-noReceipt').checked = false;
   }
   openModal('expenseModal');
-  setTimeout(() => document.getElementById('exp-amount').focus(), 300);
 };
 
 window.saveExpense = async () => {
-  const amount = parseInt(document.getElementById('exp-amount').value) || 0;
+  const amount = calcGetValue('exp');
   const date = document.getElementById('exp-date').value;
   const categoryId = document.getElementById('exp-categoryId').value;
   const shop = document.getElementById('exp-shop').value.trim();
@@ -2577,14 +2933,14 @@ window.openIncomeModal = (id = null, date = null) => {
   if (id) {
     const e = incomes.find(x => x.id === id);
     if (!e) return;
-    document.getElementById('inc-amount').value = e.amount || '';
+    calcState['inc'] = String(e.amount || ''); calcUpdate('inc');
     document.getElementById('inc-date').value = e.date || todayStr();
     document.getElementById('inc-typeId').value = e.typeId || '';
     document.getElementById('inc-accountId').value = e.accountId || '';
     document.getElementById('inc-memo').value = e.memo || '';
     document.getElementById('incAccountAmtWrap').style.display = e.accountId ? 'block' : 'none';
   } else {
-    document.getElementById('inc-amount').value = '';
+    calcState['inc'] = ''; calcUpdate('inc');
     document.getElementById('inc-date').value = date || todayStr();
     document.getElementById('inc-typeId').value = '';
     document.getElementById('inc-accountId').value = '';
@@ -2592,11 +2948,10 @@ window.openIncomeModal = (id = null, date = null) => {
     document.getElementById('incAccountAmtWrap').style.display = 'none';
   }
   openModal('incomeModal');
-  setTimeout(() => document.getElementById('inc-amount').focus(), 300);
 };
 
 window.saveIncome = async () => {
-  const amount = parseInt(document.getElementById('inc-amount').value) || 0;
+  const amount = calcGetValue('inc');
   const date = document.getElementById('inc-date').value;
   const typeId = document.getElementById('inc-typeId').value;
   const accountId = document.getElementById('inc-accountId').value;
@@ -2660,22 +3015,21 @@ window.openAccountTxModal = (id = null, date = null, accountId = null, txType = 
   editingAccountTxId = id;
   document.getElementById('accountTxTitle').textContent = id ? '口座入出金を編集' : '口座 入出金';
   document.getElementById('tx-date').value = date || todayStr();
-  document.getElementById('tx-amount').value = '';
+  calcState['tx'] = ''; calcUpdate('tx');
+  calcState['txfee'] = ''; calcUpdate('txfee');
   document.getElementById('tx-memo').value = '';
-  document.getElementById('tx-fee').value = '';
   document.getElementById('tx-accountId').value = accountId || '';
   setTxType(txType || 'deposit');
   openModal('accountTxModal');
-  setTimeout(() => document.getElementById('tx-amount').focus(), 300);
 };
 
 window.saveAccountTx = async () => {
   const accountId = document.getElementById('tx-accountId').value;
-  const amount = parseInt(document.getElementById('tx-amount').value) || 0;
+  const amount = calcGetValue('tx');
   const date = document.getElementById('tx-date').value;
   const memo = document.getElementById('tx-memo').value.trim();
   const toAccountId = document.getElementById('tx-toAccountId').value;
-  const feeAmt = parseInt(document.getElementById('tx-fee').value) || 0;
+  const feeAmt = calcGetValue('txfee');
   if (!accountId || !amount || !date) { alert('口座・金額・日付は必須です'); return; }
   if (currentTxType === 'move' && !toAccountId) { alert('移動先口座を選択してください'); return; }
   const data = { accountId, txType: currentTxType, amount, date, memo };
@@ -2720,14 +3074,14 @@ window.openAdjustModal = (accountId, calcBal) => {
   const acc = settings.accounts.find(a => a.id === accountId);
   document.getElementById('adjustTitle').textContent = `差額調整：${acc?.name||''}`;
   document.getElementById('adjustCalcBal').textContent = '¥' + calcBal.toLocaleString();
-  document.getElementById('adjust-actual').value = '';
+  calcState['adj'] = ''; calcUpdate('adj');
   document.getElementById('adjust-date').value = todayStr();
   openModal('adjustModal');
 };
 
 window.saveAdjust = async () => {
-  const actual = parseInt(document.getElementById('adjust-actual').value);
-  if (isNaN(actual)) { alert('実際の残高を入力してください'); return; }
+  if (!calcState['adj']) { alert('実際の残高を入力してください'); return; }
+  const actual = calcGetValue('adj');
   const date = document.getElementById('adjust-date').value;
   const calcBal = parseInt(document.getElementById('adjustCalcBal').textContent.replace(/[¥,]/g,'')) || 0;
   const delta = actual - calcBal; // プラスなら増加、マイナスなら減少
@@ -2813,14 +3167,15 @@ function renderSettings() {
   const accContainer = document.getElementById('accountSettingList');
   accContainer.innerHTML = settings.accounts.map((item, i) => {
     const bal = calcAccountBalance(item.id, item.initialBalance || 0);
+    const initDateStr = item.initialDate ? `（${item.initialDate.replace(/-/g,'/')}起点）` : '';
     return `<div class="setting-item">
       <div style="display:flex;gap:2px;">
         <button class="btn-order" onclick="moveSettingItem('account',${i},-1)">▲</button>
         <button class="btn-order" onclick="moveSettingItem('account',${i},1)">▼</button>
       </div>
       <div class="setting-item-name">${item.name}</div>
-      <div class="setting-item-sub">¥${bal.toLocaleString()}</div>
-      <button class="btn-icon-edit" onclick="openInitBalModal('${item.id}','${item.name}',${item.initialBalance||0})">✏️</button>
+      <div class="setting-item-sub">¥${(item.initialBalance||0).toLocaleString()}${initDateStr}</div>
+      <button class="btn-icon-edit" onclick="openInitBalModal('${item.id}','${item.name}',${item.initialBalance||0},'${item.initialDate||''}')">✏️</button>
       <button class="btn-icon-del" onclick="deleteSettingItem('${item.id}','account')">🗑️</button>
     </div>`;
   }).join('');
@@ -2845,12 +3200,25 @@ function renderSimpleSettingList(containerId, items, type) {
   `).join('');
 }
 
-// 初期残高設定モーダル（簡易：アラート）
-window.openInitBalModal = async (id, name, currentBal) => {
-  const val = prompt(`${name}の初期残高を入力してください\n（現在：¥${currentBal.toLocaleString()}）\n※初回のみ設定。変更は差額調整を使用してください。`);
-  if (val === null) return;
-  const bal = parseInt(val) || 0;
-  await updateDoc(doc(db, 'kakeibo_settings', id), { initialBalance: bal });
+let _initBalAccountId = null;
+
+window.openInitBalModal = (id, name, currentBal, currentDate = '') => {
+  _initBalAccountId = id;
+  document.getElementById('initBalModalTitle').textContent = `初期残高：${name}`;
+  calcState['initBal'] = String(currentBal || ''); calcUpdate('initBal');
+  document.getElementById('initBal-date').value = currentDate || todayStr();
+  openModal('initBalModal');
+};
+
+window.saveInitBal = async () => {
+  if (!_initBalAccountId) return;
+  const bal = calcGetValue('initBal');
+  const date = document.getElementById('initBal-date').value;
+  await updateDoc(doc(db, 'kakeibo_settings', _initBalAccountId), {
+    initialBalance: bal,
+    initialDate: date
+  });
+  closeModal('initBalModal');
   showToast(`初期残高を¥${bal.toLocaleString()}に設定しました`);
 };
 
