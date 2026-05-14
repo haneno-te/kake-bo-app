@@ -1515,6 +1515,10 @@
         <option value="">カテゴリなし</option>
       </select>
     </div>
+    <div class="form-row" id="editSettingBillingDayRow" style="display:none;">
+      <label class="form-label">引き落とし日（日）</label>
+      <input type="number" class="form-input" id="editSettingBillingDay" placeholder="例：10" min="1" max="31" inputmode="numeric">
+    </div>
     <button class="btn-primary" onclick="saveSettingEdit()">保存</button>
     <button class="btn-secondary" id="editSettingCancelBtn" onclick="closeModal('settingEditModal')">キャンセル</button>
   </div>
