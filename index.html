@@ -2366,13 +2366,11 @@ function renderAccountsTab() {
     return;
   }
 
-  // totalAsset: excludeFromTotal=trueの口座を除外（hidden問わず）
   let totalAsset = 0;
   settings.accounts.forEach(acc => {
     if (!acc.excludeFromTotal) totalAsset += calcAccountBalance(acc.id, acc.initialBalance || 0);
   });
 
-  // 使途不明金
   let totalUnused = 0;
   settings.accounts.forEach(acc => {
     const unusedAmt = accountTxs.filter(t => t.accountId === acc.id && t.txType === 'adjust')
@@ -2383,8 +2381,8 @@ function renderAccountsTab() {
   const ym = currentYM();
   const ymStart = ym + '-01';
   const nextM = currentMonth === 12 ? `${currentYear+1}-01-01` : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+  const typeLabels = { deposit:'預け入れ', withdraw:'引き下ろし', transfer_in:'入金', transfer_out:'振込', move:'口座間移動', adjust:'差額調整' };
 
-  // hidden=trueの口座はカード表示をスキップ
   container.innerHTML = settings.accounts.filter(acc => !acc.hidden).map(acc => {
     const calcBal = calcAccountBalance(acc.id, acc.initialBalance || 0);
     const monthLogs = accountTxs.filter(t =>
@@ -2392,8 +2390,7 @@ function renderAccountsTab() {
       t.date >= ymStart && t.date < nextM
     ).sort((a,b) => b.date.localeCompare(a.date));
 
-    const logsHtml = monthLogs.length > 0 ? monthLogs.slice(0, 5).map(t => {
-      const typeLabels = { deposit:'預け入れ', withdraw:'引き下ろし', transfer_in:'入金', transfer_out:'振込', move:'口座間移動', adjust:'差額調整' };
+    const logsHtml = monthLogs.length > 0 ? monthLogs.map(t => {
       let amount = t.amount || 0;
       let cls = 'transfer';
       if (t.accountId === acc.id) {
@@ -2405,27 +2402,33 @@ function renderAccountsTab() {
         <span class="account-log-date">${t.date.slice(5).replace('-','/')}</span>
         <span class="account-log-label">${typeLabels[t.txType]||t.txType}${t.memo ? ' / ' + t.memo : ''}</span>
         <span class="account-log-amount ${cls}">${sign}¥${Math.abs(amount).toLocaleString()}</span>
+        <span style="display:flex;gap:4px;flex-shrink:0;">
+          <button class="btn-edit" onclick="openAccountTxModal('${t.id}')">✏️</button>
+          <button class="btn-del" onclick="deleteAccountTx('${t.id}')">🗑️</button>
+        </span>
       </div>`;
     }).join('') : '<div style="font-size:12px;color:var(--text2);padding:8px 0;">今月の記録なし</div>';
 
-    return `<div class="account-card">
-      <div class="account-card-header">
-        <div class="account-card-name">${acc.name}</div>
-        <div class="account-card-balance">¥${calcBal.toLocaleString()}</div>
+    return `<div class="accordion-section">
+      <div class="accordion-header" onclick="toggleAccordion(this)">
+        <span>${acc.name}</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="color:var(--income);font-weight:700;font-size:14px;">¥${calcBal.toLocaleString()}</span>
+          <span class="accordion-arrow">▼</span>
+        </div>
       </div>
-      <div class="account-card-btns">
-        <button class="btn-sm inc" onclick="openAccountTxModal(null, null, '${acc.id}', 'deposit')">預け入れ</button>
-        <button class="btn-sm" onclick="openAccountTxModal(null, null, '${acc.id}', 'transfer_in')">入金</button>
-        <button class="btn-sm exp" onclick="openAccountTxModal(null, null, '${acc.id}', 'withdraw')">引き下ろし</button>
-        <button class="btn-sm" onclick="openAccountTxModal(null, null, '${acc.id}', 'transfer_out')">振込</button>
-        <button class="btn-sm" onclick="openAccountTxModal(null, null, '${acc.id}', 'move')">移動</button>
-        <button class="adjust-btn" onclick="openAdjustModal('${acc.id}', ${calcBal})">差額調整</button>
-      </div>
-      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
+      <div class="accordion-body" style="display:none;">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+          <button class="btn-sm inc" onclick="openAccountTxModal(null, null, '${acc.id}', 'deposit')">預け入れ</button>
+          <button class="btn-sm" onclick="openAccountTxModal(null, null, '${acc.id}', 'transfer_in')">入金</button>
+          <button class="btn-sm exp" onclick="openAccountTxModal(null, null, '${acc.id}', 'withdraw')">引き下ろし</button>
+          <button class="btn-sm" onclick="openAccountTxModal(null, null, '${acc.id}', 'transfer_out')">振込</button>
+          <button class="btn-sm" onclick="openAccountTxModal(null, null, '${acc.id}', 'move')">移動</button>
+          <button class="adjust-btn" onclick="openAdjustModal('${acc.id}', ${calcBal})">差額調整</button>
+        </div>
         <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">今月の履歴</div>
         ${logsHtml}
       </div>
-      ${monthLogs.length > 5 ? `<div style="font-size:11px;color:var(--accent);text-align:center;margin-top:4px;cursor:pointer;">全${monthLogs.length}件を表示</div>` : ''}
     </div>`;
   }).join('');
 
@@ -2501,13 +2504,14 @@ function renderCardTab() {
     const confirmedHtml = confirmed.length === 0
       ? '<div class="loading">今月の確定記録なし</div>'
       : confirmed.map(c => `<div class="card-confirmed-item">
-          <div>
+          <input type="checkbox" checked onchange="if(!this.checked){this.checked=true;returnToPool('${c.id}',${c.fromPool||false})}" style="accent-color:var(--card-color);width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-right:6px;">
+          <div style="flex:1;">
             <div style="font-size:13px;font-weight:600;">${c.memo || '（内容なし）'}</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <div style="font-size:15px;font-weight:700;color:var(--card-color);">¥${(c.total||0).toLocaleString()}</div>
-            <button class="btn-edit" onclick="openCardFixedModal('${c.id}', ${c.fromPool||false})">✏️</button>
-            <button class="btn-del" onclick="deleteCardConfirmed('${c.id}', ${c.fromPool||false})">🗑️</button>
+            <button class="btn-edit" onclick="openCardFixedModal('${c.id}', ${c.fromPool||false})">✏️ 編集</button>
+            <button class="btn-del" onclick="deleteCardConfirmed('${c.id}', ${c.fromPool||false})">🗑️ 削除</button>
           </div>
         </div>`).join('');
 
@@ -2649,6 +2653,28 @@ window.deleteCardConfirmed = (id, fromPool) => {
       await deleteDoc(doc(db, 'card_confirmed', id));
     }
     await loadMonthData();
+  });
+};
+
+window.returnToPool = (id, fromPool) => {
+  showConfirm('確定を取り消してプールに戻しますか？', async () => {
+    if (fromPool) {
+      await updateDoc(doc(db, 'card_pools', id), { confirmedMonth: null });
+    } else {
+      const c = cardConfirmed.find(x => x.id === id);
+      if (c) {
+        await addDoc(collection(db, 'card_pools'), {
+          amount: c.total || 0,
+          date: todayStr(),
+          cardId: c.cardId,
+          memo: c.memo || '',
+          installType: 'once'
+        });
+        await deleteDoc(doc(db, 'card_confirmed', id));
+      }
+    }
+    await loadMonthData();
+    showToast('プールに戻しました');
   });
 };
 
@@ -3202,12 +3228,25 @@ window.deleteIncome = (id) => {
 window.openAccountTxModal = (id = null, date = null, accountId = null, txType = null) => {
   editingAccountTxId = id;
   document.getElementById('accountTxTitle').textContent = id ? '口座入出金を編集' : '口座 入出金';
-  document.getElementById('tx-date').value = date || todayStr();
-  calcState['tx'] = ''; calcUpdate('tx');
-  calcState['txfee'] = ''; calcUpdate('txfee');
-  document.getElementById('tx-memo').value = '';
-  document.getElementById('tx-accountId').value = accountId || '';
-  setTxType(txType || 'deposit');
+  if (id) {
+    const t = accountTxs.find(x => x.id === id);
+    if (t) {
+      calcState['tx'] = String(t.amount || ''); calcUpdate('tx');
+      calcState['txfee'] = ''; calcUpdate('txfee');
+      document.getElementById('tx-date').value = t.date || todayStr();
+      document.getElementById('tx-memo').value = t.memo || '';
+      document.getElementById('tx-accountId').value = t.accountId || '';
+      if (t.toAccountId) document.getElementById('tx-toAccountId').value = t.toAccountId;
+      setTxType(t.txType || 'deposit');
+    }
+  } else {
+    document.getElementById('tx-date').value = date || todayStr();
+    calcState['tx'] = ''; calcUpdate('tx');
+    calcState['txfee'] = ''; calcUpdate('txfee');
+    document.getElementById('tx-memo').value = '';
+    document.getElementById('tx-accountId').value = accountId || '';
+    setTxType(txType || 'deposit');
+  }
   openModal('accountTxModal');
 };
 
@@ -3222,29 +3261,33 @@ window.saveAccountTx = async () => {
   if (currentTxType === 'move' && !toAccountId) { alert('移動先口座を選択してください'); return; }
   const data = { accountId, txType: currentTxType, amount, date, memo };
   if (currentTxType === 'move') data.toAccountId = toAccountId;
-  await addDoc(collection(db, 'account_txs'), data);
-  if (currentTxType === 'withdraw') {
-    const cashAcc = settings.accounts.find(a => a.name === '現金');
-    if (cashAcc) {
-      await addDoc(collection(db, 'account_txs'), {
-        accountId: cashAcc.id,
-        txType: 'deposit',
-        amount,
-        date,
-        memo: '引き下ろし（自動）'
-      });
-      showToast('現金口座に自動反映しました');
+  if (editingAccountTxId) {
+    await updateDoc(doc(db, 'account_txs', editingAccountTxId), data);
+  } else {
+    await addDoc(collection(db, 'account_txs'), data);
+    if (currentTxType === 'withdraw') {
+      const cashAcc = settings.accounts.find(a => a.name === '現金');
+      if (cashAcc) {
+        await addDoc(collection(db, 'account_txs'), {
+          accountId: cashAcc.id,
+          txType: 'deposit',
+          amount,
+          date,
+          memo: '引き下ろし（自動）'
+        });
+        showToast('現金口座に自動反映しました');
+      }
     }
-  }
-  if (feeAmt > 0 && (currentTxType === 'transfer_out' || currentTxType === 'withdraw' || currentTxType === 'move')) {
-    await addDoc(collection(db, 'account_txs'), {
-      accountId, txType: 'transfer_out', amount: feeAmt, date, memo: '手数料'
-    });
-    await addDoc(collection(db, 'expenses'), {
-      date, amount: feeAmt, categoryId: '', shop: '', memo: '銀行手数料',
-      type: 'other', payMethod: 'transfer', accountId, breakdowns: [], noReceipt: false
-    });
-    showToast(`手数料 ¥${feeAmt.toLocaleString()} を記録しました`);
+    if (feeAmt > 0 && (currentTxType === 'transfer_out' || currentTxType === 'withdraw' || currentTxType === 'move')) {
+      await addDoc(collection(db, 'account_txs'), {
+        accountId, txType: 'transfer_out', amount: feeAmt, date, memo: '手数料'
+      });
+      await addDoc(collection(db, 'expenses'), {
+        date, amount: feeAmt, categoryId: '', shop: '', memo: '銀行手数料',
+        type: 'other', payMethod: 'transfer', accountId, breakdowns: [], noReceipt: false
+      });
+      showToast(`手数料 ¥${feeAmt.toLocaleString()} を記録しました`);
+    }
   }
   closeModal('accountTxModal');
   await loadMonthData();
