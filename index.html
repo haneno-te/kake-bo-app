@@ -1589,6 +1589,48 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="fixedPayModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <div class="modal-title" id="fixedPayModalTitle">今月分を登録</div>
+      <button class="modal-close" onclick="closeModal('fixedPayModal')">×</button>
+    </div>
+    <div class="form-row">
+      <label class="form-label">金額（円）</label>
+      <div class="calc-display">
+        <div class="calc-result zero" id="fp-calcResult">0</div>
+        <div class="calc-expr" id="fp-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('fp','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('fp','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('fp','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('fp','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('fp','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('fp','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('fp','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('fp','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('fp','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('fp','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('fp','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('fp','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('fp','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('fp','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('fp','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('fp')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('fp')">⌫</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">日付</label>
+      <input type="date" class="form-input" id="fp-date">
+    </div>
+    <input type="hidden" id="fp-fixedCostId">
+    <button class="btn-primary" onclick="saveFixedPay()">登録</button>
+    <button class="btn-secondary" onclick="closeModal('fixedPayModal')">キャンセル</button>
+  </div>
+</div>
+
 <!-- 確認ダイアログ -->
 <div class="confirm-overlay" id="confirmOverlay">
   <div class="confirm-box">
@@ -1656,7 +1698,7 @@ let currentFixPayMethod = null;
 let confirmCallback = null;
 
 // ===== 電卓 =====
-const calcState = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', cp:'', cpinst:'', adj:'', initBal:'' };
+const calcState = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', cp:'', cpinst:'', adj:'', initBal:'', fp:'' };
 
 function calcEval(expr) {
   try {
@@ -2857,6 +2899,11 @@ function renderFixedTab() {
     document.getElementById('fixedMonthTotal').textContent = '¥0';
     return;
   }
+  const ym = currentYM();
+  const ymStart = ym + '-01';
+  const nextM = currentMonth === 12
+    ? `${currentYear+1}-01-01`
+    : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
   let total = 0;
   list.innerHTML = fixedCosts.map((f, i) => {
     const amount = f.actualAmount || f.amount || 0;
@@ -2868,6 +2915,19 @@ function renderFixedTab() {
       f.payMethod === 'card' ? `カード${f.payCardId ? '（' + (settings.cards.find(c => c.id === f.payCardId)?.name || '') + '）' : ''}` :
       f.payMethod === 'transfer' ? `口座振込${f.payAccountId ? '（' + (settings.accounts.find(a => a.id === f.payAccountId)?.name || '') + '）' : ''}` : '';
     const payInfo = [payDayLabel, payMethodLabel].filter(Boolean).join(' / ');
+
+    let isRegistered = false;
+    if (f.payMethod === 'card') {
+      isRegistered = cardPools.some(p => p.fixedCostId === f.id && p.month === ym);
+    } else if (f.payMethod === 'transfer' || f.payMethod === 'cash') {
+      isRegistered = expenses.some(e => e.fixedCostId === f.id && e.date >= ymStart && e.date < nextM);
+    }
+    const registerCell = f.payMethod
+      ? (isRegistered
+          ? `<span style="font-size:10px;color:var(--income);background:rgba(78,205,196,0.15);border-radius:6px;padding:3px 7px;flex-shrink:0;">✅ 登録済み</span>`
+          : `<button class="btn-sm accent" onclick="openFixedPayModal('${f.id}')" style="flex-shrink:0;">📥 今月分を登録</button>`)
+      : '';
+
     return `<div class="fixed-item">
       <div style="display:flex;flex-direction:column;gap:2px;margin-right:6px;">
         <button class="btn-order" onclick="moveFixed(${i},-1)">▲</button>
@@ -2879,12 +2939,68 @@ function renderFixedTab() {
         ${payInfo ? `<div class="fixed-item-type" style="color:var(--accent);margin-top:1px;">${payInfo}</div>` : ''}
       </div>
       <div class="fixed-item-amount">¥${amount.toLocaleString()}</div>
+      ${registerCell}
       <button class="btn-icon-edit" onclick="openFixedModal('${f.id}')">✏️</button>
       <button class="btn-icon-del" onclick="deleteFixed('${f.id}')">🗑️</button>
     </div>`;
   }).join('');
   document.getElementById('fixedMonthTotal').textContent = '¥' + total.toLocaleString();
 }
+
+window.openFixedPayModal = (id) => {
+  const f = fixedCosts.find(x => x.id === id);
+  if (!f) return;
+  if (!f.payMethod) { alert('支払い方法を設定してください'); return; }
+  document.getElementById('fixedPayModalTitle').textContent = `${f.name} 今月分を登録`;
+  document.getElementById('fp-fixedCostId').value = id;
+  calcState['fp'] = String(f.actualAmount || f.amount || ''); calcUpdate('fp');
+  const ym = currentYM();
+  document.getElementById('fp-date').value = f.payMethod === 'card' ? ym + '-01' : todayStr();
+  openModal('fixedPayModal');
+};
+
+window.saveFixedPay = async () => {
+  const id = document.getElementById('fp-fixedCostId').value;
+  const f = fixedCosts.find(x => x.id === id);
+  if (!f) return;
+  const amount = calcGetValue('fp');
+  const date = document.getElementById('fp-date').value;
+  if (!amount || !date) { alert('金額と日付は必須です'); return; }
+  const ym = currentYM();
+
+  if (f.payMethod === 'card') {
+    await addDoc(collection(db, 'card_pools'), {
+      amount, date, cardId: f.payCardId, memo: f.name,
+      installType: 'once', fixedCostId: f.id, month: ym
+    });
+  } else if (f.payMethod === 'transfer') {
+    await addDoc(collection(db, 'expenses'), {
+      date, amount, categoryId: '', shop: '', memo: f.name,
+      type: f.kind === 'work' ? 'work' : 'private',
+      payMethod: 'transfer', accountId: f.payAccountId,
+      breakdowns: [], noReceipt: false, fixedCostId: f.id
+    });
+    if (f.payAccountId) {
+      await addDoc(collection(db, 'account_txs'), {
+        accountId: f.payAccountId, txType: 'transfer_out',
+        amount, date, memo: f.name
+      });
+    }
+  } else if (f.payMethod === 'cash') {
+    await addDoc(collection(db, 'expenses'), {
+      date, amount, categoryId: '', shop: '', memo: f.name,
+      type: f.kind === 'work' ? 'work' : 'private',
+      payMethod: 'cash', breakdowns: [], noReceipt: false, fixedCostId: f.id
+    });
+  } else {
+    alert('支払い方法を設定してください');
+    return;
+  }
+
+  closeModal('fixedPayModal');
+  await loadMonthData();
+  showToast(`${f.name} を登録しました`);
+};
 
 window.openFixedModal = (id = null) => {
   editingFixedId = id;
