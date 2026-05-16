@@ -2023,6 +2023,7 @@ function renderCalendar() {
     if (hasBad) dots += `<span class="cal-dot" style="background:var(--bad);"></span>`;
     if (hasAccTx) dots += `<span class="cal-dot" style="background:var(--accent);"></span>`;
     if (fixedCosts.some(f => f.payDay === d)) dots += `<span class="cal-dot" style="background:var(--expense);"></span>`;
+    if (settings.cards.some(c => c.billingDay === d)) dots += `<span class="cal-dot" style="background:var(--card-color);"></span>`;
 
     html += `<div class="${cls}" onclick="selectDate('${dateStr}')">
       <span class="cal-date">${d}</span>
@@ -2071,15 +2072,69 @@ function renderDayPanel(dateStr) {
   const list = document.getElementById('calDayList');
 
   const [y,m,d] = dateStr.split('-');
+  const dayNum = parseInt(d);
+  const isFuture = dateStr >= todayStr();
   title.textContent = `${parseInt(m)}月${parseInt(d)}日`;
   panel.classList.add('open');
 
   const dayExp = expenses.filter(e => e.date === dateStr);
   const dayInc = incomes.filter(e => e.date === dateStr);
   const dayTxs = accountTxs.filter(t => t.date === dateStr);
+  const dayFixed = fixedCosts.filter(f => f.payDay === dayNum);
+  const dayBillingCards = settings.cards.filter(c => c.billingDay === dayNum);
 
   let html = '';
-  if (dayExp.length === 0 && dayInc.length === 0 && dayTxs.length === 0) {
+
+  // ① 固定費 payDay（デイパネル先頭）
+  dayFixed.forEach(f => {
+    const amount = f.actualAmount || f.amount || 0;
+    const label = isFuture
+      ? '<div style="font-size:10px;color:var(--expense);font-weight:700;margin-bottom:4px;">📌 支払い予定</div>'
+      : '';
+    html += `<div class="record-item" style="border-color:var(--expense);">
+      ${label}
+      <div class="record-top">
+        <div class="record-left">
+          <div class="record-category">固定費</div>
+          <div class="record-memo">${f.name}</div>
+        </div>
+        <div class="record-right">
+          <div class="record-amount">¥${amount.toLocaleString()}</div>
+        </div>
+      </div>
+    </div>`;
+  });
+
+  // ② カード billingDay（デイパネル先頭）
+  const ym = currentYM();
+  dayBillingCards.forEach(card => {
+    const confirmedTotal = cardConfirmed
+      .filter(cc => cc.cardId === card.id)
+      .reduce((s, cc) => s + (cc.total || 0), 0);
+    const poolTotal = cardPools
+      .filter(p => p.cardId === card.id && p.confirmedMonth === ym)
+      .reduce((s, p) => s + (p.installType === 'installment' ? (p.installAmt || 0) : (p.amount || 0)), 0);
+    const total = confirmedTotal + poolTotal;
+    const amtStr = total > 0 ? `¥${total.toLocaleString()}` : '――円';
+    const label = isFuture
+      ? '<div style="font-size:10px;color:var(--card-color);font-weight:700;margin-bottom:4px;">💳 引き落とし予定</div>'
+      : '';
+    html += `<div class="record-item" style="border-color:var(--card-color);">
+      ${label}
+      <div class="record-top">
+        <div class="record-left">
+          <div class="record-category">カード引き落とし</div>
+          <div class="record-memo">💳 ${card.name}</div>
+        </div>
+        <div class="record-right">
+          <div class="record-amount" style="color:var(--card-color);">${amtStr}</div>
+        </div>
+      </div>
+    </div>`;
+  });
+
+  if (dayExp.length === 0 && dayInc.length === 0 && dayTxs.length === 0
+      && dayFixed.length === 0 && dayBillingCards.length === 0) {
     html = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:12px;">記録なし</div>';
   }
 
