@@ -1569,6 +1569,23 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="billingOverrideModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <div class="modal-title" id="billingOverrideModalTitle">💳 引き落とし日を変更（今月のみ）</div>
+      <button class="modal-close" onclick="closeModal('billingOverrideModal')">×</button>
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">今月のみ有効です。翌月は自動的にデフォルトに戻ります。</div>
+    <div class="form-row">
+      <label class="form-label">引き落とし日（1〜31）</label>
+      <input type="number" class="form-input" id="billingOverrideDay" min="1" max="31" placeholder="例：12">
+    </div>
+    <input type="hidden" id="billingOverrideCardId">
+    <button class="btn-primary" onclick="saveBillingOverride()">保存</button>
+    <button class="btn-secondary" onclick="closeModal('billingOverrideModal')">キャンセル</button>
+  </div>
+</div>
+
 <!-- 確認ダイアログ -->
 <div class="confirm-overlay" id="confirmOverlay">
   <div class="confirm-box">
@@ -1610,6 +1627,7 @@ let accountTxs = [];    // 口座入出金ログ
 let cardPools = [];     // カード未払いプール
 let cardConfirmed = []; // カード引き落とし確定
 let fixedCosts = [];
+let cardBillingOverrides = []; // カード引き落とし日当月上書き
 let settings = {
   categories: [], catGroups: [],
   incomeTypes: [],
@@ -1722,6 +1740,11 @@ function todayStr() {
 }
 function currentYM() {
   return `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
+}
+
+function getEffectiveBillingDay(card) {
+  const override = cardBillingOverrides.find(o => o.cardId === card.id);
+  return override ? override.billingDay : card.billingDay;
 }
 
 // ===== グローバル公開 =====
@@ -1906,13 +1929,14 @@ async function loadMonthData() {
   const prevMon = currentMonth === 1 ? 12 : currentMonth - 1;
   const prevYmStart = `${prevYear}-${String(prevMon).padStart(2,'0')}-01`;
 
-  const [expSnap, incSnap, txSnap, cpSnap, ccSnap, fixSnap] = await Promise.all([
+  const [expSnap, incSnap, txSnap, cpSnap, ccSnap, fixSnap, cboSnap] = await Promise.all([
     getDocs(collection(db, 'expenses')),
     getDocs(collection(db, 'income')),
     getDocs(collection(db, 'account_txs')),
     getDocs(collection(db, 'card_pools')),
     getDocs(collection(db, 'card_confirmed')),
     getDocs(collection(db, 'fixed_costs')),
+    getDocs(collection(db, 'card_billing_overrides')),
   ]);
 
   expenses = [];
@@ -1947,6 +1971,12 @@ async function loadMonthData() {
   fixedCosts = [];
   fixSnap.forEach(d => fixedCosts.push({ id: d.id, ...d.data() }));
   fixedCosts.sort((a,b) => (a.order||0) - (b.order||0));
+
+  cardBillingOverrides = [];
+  cboSnap.forEach(d => {
+    const data = { id: d.id, ...d.data() };
+    if (data.month === ym) cardBillingOverrides.push(data);
+  });
 
   // 月初自動プール生成
   const autoPoolFixed = fixedCosts.filter(f => f.autoPool && f.payMethod === 'card' && f.payCardId);
@@ -2022,7 +2052,7 @@ function renderCalendar() {
     if (hasBad) dots += `<span class="cal-dot" style="background:var(--bad);"></span>`;
     if (hasAccTx) dots += `<span class="cal-dot" style="background:var(--accent);"></span>`;
     if (fixedCosts.some(f => f.payDay === d)) dots += `<span class="cal-dot" style="background:var(--expense);"></span>`;
-    if (settings.cards.some(c => c.billingDay === d)) dots += `<span class="cal-dot" style="background:var(--card-color);"></span>`;
+    if (settings.cards.some(c => getEffectiveBillingDay(c) === d)) dots += `<span class="cal-dot" style="background:var(--card-color);"></span>`;
 
     html += `<div class="${cls}" onclick="selectDate('${dateStr}')">
       <span class="cal-date">${d}</span>
@@ -2080,7 +2110,7 @@ function renderDayPanel(dateStr) {
   const dayInc = incomes.filter(e => e.date === dateStr);
   const dayTxs = accountTxs.filter(t => t.date === dateStr);
   const dayFixed = fixedCosts.filter(f => f.payDay === dayNum);
-  const dayBillingCards = settings.cards.filter(c => c.billingDay === dayNum);
+  const dayBillingCards = settings.cards.filter(c => getEffectiveBillingDay(c) === dayNum);
 
   let html = '';
 
@@ -2128,6 +2158,9 @@ function renderDayPanel(dateStr) {
         <div class="record-right">
           <div class="record-amount" style="color:var(--card-color);">${amtStr}</div>
         </div>
+      </div>
+      <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px;">
+        <button class="btn-edit" onclick="openBillingOverrideModal('${card.id}')">📅 変更</button>
       </div>
     </div>`;
   });
@@ -2688,6 +2721,32 @@ window.openFixedFromCard = (id) => {
   switchTab('fixed');
   openFixedModal(id);
   showToast('固定費タブで編集してください');
+};
+
+window.openBillingOverrideModal = (cardId) => {
+  const card = settings.cards.find(c => c.id === cardId);
+  if (!card) return;
+  const override = cardBillingOverrides.find(o => o.cardId === cardId);
+  document.getElementById('billingOverrideModalTitle').textContent = `💳 ${card.name}の引き落とし日を変更（今月のみ）`;
+  document.getElementById('billingOverrideCardId').value = cardId;
+  document.getElementById('billingOverrideDay').value = override ? override.billingDay : (card.billingDay || '');
+  openModal('billingOverrideModal');
+};
+
+window.saveBillingOverride = async () => {
+  const cardId = document.getElementById('billingOverrideCardId').value;
+  const day = parseInt(document.getElementById('billingOverrideDay').value);
+  if (!cardId || !day || day < 1 || day > 31) { alert('1〜31の日数を入力してください'); return; }
+  const ym = currentYM();
+  const existing = cardBillingOverrides.find(o => o.cardId === cardId);
+  if (existing) {
+    await updateDoc(doc(db, 'card_billing_overrides', existing.id), { billingDay: day });
+  } else {
+    await addDoc(collection(db, 'card_billing_overrides'), { cardId, month: ym, billingDay: day });
+  }
+  closeModal('billingOverrideModal');
+  await loadMonthData();
+  showToast('引き落とし日を変更しました');
 };
 
 window.deleteCardConfirmed = (id, fromPool) => {
