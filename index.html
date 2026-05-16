@@ -1737,6 +1737,7 @@ document.addEventListener('input', (e) => {
 
 let adjustAccountId = null;
 let cardConfirmTargetId = null;
+let cardConfirmGuard = false; // モーダル開直後の誤実行防止フラグ
 
 const now = new Date();
 currentYear = now.getFullYear();
@@ -2648,15 +2649,18 @@ window.onCardPoolCheck = (id, checkbox) => {
     document.getElementById('ccFeeWrap').style.display = 'none';
   }
   openModal('cardConfirmModal');
-  // ボトムシート展開時のゴーストクリックによる即時確定を防ぐ
+  // ボトムシート展開時のゴーストクリック・Enter誤発火による即時確定を防ぐ
+  cardConfirmGuard = true;
   const confirmBtn = document.querySelector('#cardConfirmModal .btn-primary');
-  if (confirmBtn) {
-    confirmBtn.disabled = true;
-    setTimeout(() => { confirmBtn.disabled = false; }, 400);
-  }
+  if (confirmBtn) confirmBtn.disabled = true;
+  setTimeout(() => {
+    cardConfirmGuard = false;
+    if (confirmBtn) confirmBtn.disabled = false;
+  }, 400);
 };
 
 window.confirmCardPayment = async () => {
+  if (cardConfirmGuard) return; // モーダル開直後の誤実行防止
   const c = cardPools.find(x => x.id === cardConfirmTargetId);
   if (!c) return;
   const month = document.getElementById('cc-month').value;
@@ -3907,7 +3911,7 @@ document.addEventListener('keydown', (e) => {
   const activeModal = document.querySelector('.modal-overlay.open');
   if (activeModal) {
     const primary = activeModal.querySelector('.btn-primary');
-    if (primary) { e.preventDefault(); primary.click(); }
+    if (primary && !primary.disabled) { e.preventDefault(); primary.click(); }
   }
 });
 
