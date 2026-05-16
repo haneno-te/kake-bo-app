@@ -2407,9 +2407,21 @@ function renderAccountsTab() {
         else cls = 'plus';
       } else { cls = 'plus'; }
       const sign = cls === 'plus' ? '+' : cls === 'minus' ? '-' : '±';
+      let logLabel;
+      if (t.txType === 'move') {
+        if (t.accountId === acc.id) {
+          const toName = settings.accounts.find(a => a.id === t.toAccountId)?.name || t.toAccountId;
+          logLabel = `移動 / ${toName}${t.memo ? ' / ' + t.memo : ''}`;
+        } else {
+          const fromName = settings.accounts.find(a => a.id === t.accountId)?.name || t.accountId;
+          logLabel = `移動（受）/ ${fromName}${t.memo ? ' / ' + t.memo : ''}`;
+        }
+      } else {
+        logLabel = `${typeLabels[t.txType]||t.txType}${t.memo ? ' / ' + t.memo : ''}`;
+      }
       return `<div class="account-log-item">
         <span class="account-log-date">${t.date.slice(5).replace('-','/')}</span>
-        <span class="account-log-label">${typeLabels[t.txType]||t.txType}${t.memo ? ' / ' + t.memo : ''}</span>
+        <span class="account-log-label">${logLabel}</span>
         <span class="account-log-amount ${cls}">${sign}¥${Math.abs(amount).toLocaleString()}</span>
         <span style="display:flex;gap:4px;flex-shrink:0;">
           <button class="btn-edit" onclick="openAccountTxModal('${t.id}')">✏️</button>
