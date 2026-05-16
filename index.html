@@ -852,6 +852,9 @@
         <input type="text" id="newCategoryInput" placeholder="費目名" style="flex:2;">
         <button onclick="addCategory()">追加</button>
       </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+        <button class="btn-sm" id="toggleHidden_categories" onclick="toggleShowHidden('categories')">👁 非表示項目を表示する</button>
+      </div>
       <div class="setting-list" id="categoryList"></div>
     </div>
   </div>
@@ -888,6 +891,9 @@
         <input type="text" id="newShopInput" placeholder="店名・場所" style="flex:2;">
         <button onclick="addShop()">追加</button>
       </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+        <button class="btn-sm" id="toggleHidden_shops" onclick="toggleShowHidden('shops')">👁 非表示項目を表示する</button>
+      </div>
       <div class="setting-list" id="shopList"></div>
     </div>
   </div>
@@ -900,6 +906,9 @@
       <div class="add-item-row">
         <input type="text" id="newAccountInput" placeholder="口座名（例：ゆうちょ）">
         <button onclick="addAccount()">追加</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+        <button class="btn-sm" id="toggleHidden_accounts" onclick="toggleShowHidden('accounts')">👁 非表示項目を表示する</button>
       </div>
       <div class="setting-list" id="accountSettingList"></div>
     </div>
@@ -3557,6 +3566,12 @@ window.saveAdjust = async () => {
 };
 
 // ===== 設定 =====
+window.toggleShowHidden = (type) => {
+  const key = `showHidden_${type}`;
+  localStorage.setItem(key, String(localStorage.getItem(key) !== 'true'));
+  renderSettings();
+};
+
 function renderSettings() {
   // 費目グループ
   const catGContainer = document.getElementById('catGroupList');
@@ -3567,12 +3582,14 @@ function renderSettings() {
     </div>
   `).join('');
 
-  // 費目（非表示項目を末尾に）
+  // 費目（非表示トグル制御）
   const catContainer = document.getElementById('categoryList');
-  const sortedCats = [
-    ...settings.categories.filter(x => !x.hidden),
-    ...settings.categories.filter(x => x.hidden)
-  ];
+  const showHiddenCats = localStorage.getItem('showHidden_categories') === 'true';
+  const catBtn = document.getElementById('toggleHidden_categories');
+  if (catBtn) catBtn.textContent = showHiddenCats ? '👁 非表示項目を隠す' : '👁 非表示項目を表示する';
+  const sortedCats = showHiddenCats
+    ? [...settings.categories.filter(x => !x.hidden), ...settings.categories.filter(x => x.hidden)]
+    : settings.categories.filter(x => !x.hidden);
   catContainer.innerHTML = sortedCats.map(item => {
     const i = settings.categories.indexOf(item);
     const groupName = item.groupId ? settings.catGroups.find(g => g.id === item.groupId)?.name || '' : '';
@@ -3602,12 +3619,14 @@ function renderSettings() {
     </div>
   `).join('');
 
-  // お店（非表示項目を末尾に）
+  // お店（非表示トグル制御）
   const shopContainer = document.getElementById('shopList');
-  const sortedShops = [
-    ...settings.shops.filter(x => !x.hidden),
-    ...settings.shops.filter(x => x.hidden)
-  ];
+  const showHiddenShops = localStorage.getItem('showHidden_shops') === 'true';
+  const shopBtn = document.getElementById('toggleHidden_shops');
+  if (shopBtn) shopBtn.textContent = showHiddenShops ? '👁 非表示項目を隠す' : '👁 非表示項目を表示する';
+  const sortedShops = showHiddenShops
+    ? [...settings.shops.filter(x => !x.hidden), ...settings.shops.filter(x => x.hidden)]
+    : settings.shops.filter(x => !x.hidden);
   shopContainer.innerHTML = sortedShops.map(item => {
     const i = settings.shops.indexOf(item);
     const groupName = item.groupId ? settings.shopGroups.find(g => g.id === item.groupId)?.name || '' : '';
@@ -3625,11 +3644,16 @@ function renderSettings() {
     </div>`;
   }).join('');
 
-  // 口座
+  // 口座（非表示トグル制御）
   const accContainer = document.getElementById('accountSettingList');
-  accContainer.innerHTML = settings.accounts.map((item, i) => {
+  const showHiddenAccs = localStorage.getItem('showHidden_accounts') === 'true';
+  const accBtn = document.getElementById('toggleHidden_accounts');
+  if (accBtn) accBtn.textContent = showHiddenAccs ? '👁 非表示項目を隠す' : '👁 非表示項目を表示する';
+  const displayAccounts = showHiddenAccs ? settings.accounts : settings.accounts.filter(x => !x.hidden);
+  accContainer.innerHTML = displayAccounts.map((item) => {
+    const i = settings.accounts.indexOf(item);
     const initDateStr = item.initialDate ? `（${item.initialDate.replace(/-/g,'/')}起点）` : '';
-    return `<div class="setting-item" style="flex-wrap:wrap;gap:4px;">
+    return `<div class="setting-item${item.hidden ? ' setting-item-hidden' : ''}" style="flex-wrap:wrap;gap:4px;">
       <div style="display:flex;gap:2px;">
         <button class="btn-order" onclick="moveSettingItem('account',${i},-1)">▲</button>
         <button class="btn-order" onclick="moveSettingItem('account',${i},1)">▼</button>
