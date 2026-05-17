@@ -3755,12 +3755,17 @@ function renderSettings() {
 
   let catHtml = '';
   settings.catGroups.forEach(g => {
+    const catIdx = settings.catGroups.indexOf(g);
     const visible = settings.categories.filter(c => c.groupId === g.id && !c.hidden);
     const hidden = settings.categories.filter(c => c.groupId === g.id && c.hidden);
     const items = showHiddenCats ? [...visible, ...hidden] : visible;
     const isOpen = localStorage.getItem(`catGroupOpen_${g.id}`) === 'true';
     catHtml += `<div class="group-accordion">
       <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'catGroupOpen_${g.id}')">
+        <div style="display:flex;gap:2px;flex-shrink:0;">
+          <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('catGroup',${catIdx},-1)">▲</button>
+          <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('catGroup',${catIdx},1)">▼</button>
+        </div>
         <span>📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
         <div style="display:flex;align-items:center;gap:4px;">
           <button class="btn-icon-edit" onclick="event.stopPropagation();openSettingEditModal('${g.id}','catGroup')">✏️</button>
@@ -3817,12 +3822,17 @@ function renderSettings() {
 
   let shopHtml = '';
   settings.shopGroups.forEach(g => {
+    const sgIdx = settings.shopGroups.indexOf(g);
     const visible = settings.shops.filter(s => s.groupId === g.id && !s.hidden);
     const hidden = settings.shops.filter(s => s.groupId === g.id && s.hidden);
     const items = showHiddenShops ? [...visible, ...hidden] : visible;
     const isOpen = localStorage.getItem(`shopGroupOpen_${g.id}`) === 'true';
     shopHtml += `<div class="group-accordion">
       <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'shopGroupOpen_${g.id}')">
+        <div style="display:flex;gap:2px;flex-shrink:0;">
+          <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('shopGroup',${sgIdx},-1)">▲</button>
+          <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('shopGroup',${sgIdx},1)">▼</button>
+        </div>
         <span>📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
         <div style="display:flex;align-items:center;gap:4px;">
           <button class="btn-icon-edit" onclick="event.stopPropagation();openSettingEditModal('${g.id}','shopGroup')">✏️</button>
@@ -3914,10 +3924,15 @@ function renderSettings() {
 
     let bdCatHtml = '';
     settings.bdCatGroups.forEach(g => {
+      const bdIdx = settings.bdCatGroups.indexOf(g);
       const items = settings.bdItems.filter(item => item.groupId === g.id);
       const isOpen = localStorage.getItem(`bdCatGroupOpen_${g.id}`) === 'true';
       bdCatHtml += `<div class="group-accordion">
         <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'bdCatGroupOpen_${g.id}')">
+          <div style="display:flex;gap:2px;flex-shrink:0;">
+            <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('bdCatGroup',${bdIdx},-1)">▲</button>
+            <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('bdCatGroup',${bdIdx},1)">▼</button>
+          </div>
           <span>📁 ${g.name} <span class="group-badge">${items.length}</span></span>
           <div style="display:flex;align-items:center;gap:4px;">
             <button class="btn-icon-edit" onclick="event.stopPropagation();openSettingEditModal('${g.id}','bdCatGroup')">✏️</button>
@@ -3943,7 +3958,7 @@ function renderSettings() {
         </div>
       </div>`;
     }
-    bdCatContainer.innerHTML = bdCatHtml;
+    bdCatContainer.innerHTML = '<div style="height:8px;"></div>' + bdCatHtml;
   }
 }
 
