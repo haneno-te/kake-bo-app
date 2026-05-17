@@ -817,7 +817,7 @@
     <div style="font-size:11px;color:var(--text2);margin-top:4px;text-align:right;" id="workRatioLabel">仕事 0%</div>
   </div>
 
-  <div class="card" id="catSummaryCard">
+  <div class="card" id="catSummaryCard" style="display:none;">
     <div class="card-title">費目別内訳</div>
     <div id="catBreakdown"></div>
   </div>
@@ -1059,7 +1059,7 @@
       <input type="checkbox" id="exp-noReceipt" style="accent-color:var(--expense);width:16px;height:16px;">
       領収書なし（要確認）
     </label>
-    <div class="form-row">
+    <div class="form-row" style="display:none;">
       <label class="form-label">費目</label>
       <select class="form-select" id="exp-categoryId">
         <option value="">-- 選択（任意）--</option>
@@ -1721,7 +1721,6 @@ let settings = {
   accounts: [],
   cards: [],
   badCategories: [],
-  breakdownTemplates: [],
   bdCatGroups: [], bdItems: []
 };
 let editingExpenseId = null;
@@ -1897,7 +1896,7 @@ function loadSettings() {
   return new Promise((resolve) => {
     let firstFire = true;
     onSnapshot(collection(db, 'kakeibo_settings'), (snap) => {
-      settings = { categories:[], catGroups:[], incomeTypes:[], shops:[], shopGroups:[], accounts:[], cards:[], badCategories:[], breakdownTemplates:[], bdCatGroups:[], bdItems:[] };
+      settings = { categories:[], catGroups:[], incomeTypes:[], shops:[], shopGroups:[], accounts:[], cards:[], badCategories:[], bdCatGroups:[], bdItems:[] };
       snap.forEach(d => {
         const data = { id: d.id, ...d.data() };
         if (data._type === 'category') settings.categories.push(data);
@@ -1908,11 +1907,10 @@ function loadSettings() {
         else if (data._type === 'account') settings.accounts.push(data);
         else if (data._type === 'card') settings.cards.push(data);
         else if (data._type === 'badCategory') settings.badCategories.push(data);
-        else if (data._type === 'breakdownTemplate') settings.breakdownTemplates.push(data);
         else if (data._type === 'bdCatGroup') settings.bdCatGroups.push(data);
         else if (data._type === 'bdItem') settings.bdItems.push(data);
       });
-      ['categories','catGroups','incomeTypes','shops','shopGroups','accounts','cards','badCategories','breakdownTemplates','bdCatGroups','bdItems'].forEach(k => {
+      ['categories','catGroups','incomeTypes','shops','shopGroups','accounts','cards','badCategories','bdCatGroups','bdItems'].forEach(k => {
         settings[k].sort((a,b) => (a.order||0) - (b.order||0));
       });
       renderSettings();
@@ -3522,16 +3520,6 @@ window.onBdItemChange = (itemSel) => {
   if (nameInput) nameInput.value = opt.dataset.name || '';
 };
 
-window.applyBreakdownTemplate = (sel) => {
-  const id = sel.value;
-  if (!id) return;
-  const tmpl = settings.breakdownTemplates.find(t => t.id === id);
-  if (!tmpl) return;
-  const row = sel.closest('.breakdown-row');
-  const nameInput = row.querySelector('input[type=text]');
-  if (nameInput && !nameInput.value) nameInput.value = tmpl.name;
-};
-
 window.toggleBadRow = (checkbox) => {
   checkbox.closest('.breakdown-row').querySelector('.bad-category-wrap').style.display =
     checkbox.checked ? 'block' : 'none';
@@ -3908,9 +3896,6 @@ function renderSettings() {
   `).join('');
   // BAD
   renderSimpleSettingList('badCategoryList', settings.badCategories, 'badCategory');
-  // 内訳テンプレ（既存・後バッチで整理）
-  renderSimpleSettingList('breakdownTemplateList', settings.breakdownTemplates, 'breakdownTemplate');
-
   // 内訳カテゴリ・細目
   const bdCatContainer = document.getElementById('bdCatList');
   if (bdCatContainer) {
@@ -4069,14 +4054,6 @@ window.addBadCategory = async () => {
   input.value = '';
 };
 
-window.addBreakdownTemplate = async () => {
-  const input = document.getElementById('newBreakdownTemplateInput');
-  const name = input.value.trim();
-  if (!name) return;
-  await addDoc(collection(db, 'kakeibo_settings'), { _type:'breakdownTemplate', name, order: settings.breakdownTemplates.length });
-  input.value = '';
-};
-
 window.addBdCatGroup = async () => {
   const input = document.getElementById('newBdCatGroupInput');
   const name = input.value.trim();
@@ -4118,7 +4095,6 @@ window.openSettingEditModal = (id, type) => {
   const map = {
     category: 'categories', shop: 'shops',
     badCategory: 'badCategories', incomeType: 'incomeTypes', card: 'cards',
-    breakdownTemplate: 'breakdownTemplates',
     catGroup: 'catGroups', shopGroup: 'shopGroups',
     bdCatGroup: 'bdCatGroups', bdItem: 'bdItems'
   };
@@ -4129,7 +4105,7 @@ window.openSettingEditModal = (id, type) => {
   document.getElementById('editSettingName').value = item.name;
   const groupRow = document.getElementById('editSettingGroupRow');
   const groupSel = document.getElementById('editSettingGroupSel');
-  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'breakdownTemplate', 'catGroup', 'shopGroup', 'bdCatGroup'];
+  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'catGroup', 'shopGroup', 'bdCatGroup'];
   if (noGroupTypes.includes(type)) {
     groupRow.style.display = 'none';
     groupSel.innerHTML = '';
@@ -4156,7 +4132,7 @@ window.openSettingEditModal = (id, type) => {
 window.saveSettingEdit = async () => {
   const name = document.getElementById('editSettingName').value.trim();
   if (!name || !editingSettingId) return;
-  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'breakdownTemplate', 'catGroup', 'shopGroup', 'bdCatGroup'];
+  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'catGroup', 'shopGroup', 'bdCatGroup'];
   const data = noGroupTypes.includes(editingSettingType)
     ? { name }
     : { name, groupId: document.getElementById('editSettingGroupSel').value || null };
@@ -4190,7 +4166,6 @@ window.moveSettingItem = async (type, i, delta) => {
   const map = {
     category:'categories', catGroup:'catGroups', incomeType:'incomeTypes',
     shop:'shops', shopGroup:'shopGroups', account:'accounts', card:'cards', badCategory:'badCategories',
-    breakdownTemplate:'breakdownTemplates',
     bdCatGroup:'bdCatGroups', bdItem:'bdItems'
   };
   const arr = settings[map[type]];
