@@ -324,6 +324,12 @@
   .accordion-header.open .accordion-arrow { transform: rotate(180deg); }
   .accordion-body { padding: 4px 2px 10px; }
 
+  /* グループアコーディオン（設定タブ内） */
+  .group-accordion { background: var(--surface2); border-radius: 8px; overflow: hidden; margin-bottom: 4px; }
+  .group-accordion-header { display:flex; justify-content:space-between; align-items:center; padding:8px 10px; cursor:pointer; font-size:13px; font-weight:600; }
+  .group-accordion-header:hover { background:rgba(255,255,255,0.05); }
+  .group-badge { display:inline-block; background:var(--accent); color:#fff; border-radius:10px; padding:1px 6px; font-size:10px; font-weight:bold; margin-left:4px; }
+
   /* 設定リスト */
   .setting-item {
     background: var(--card); border: 1px solid var(--border);
@@ -843,7 +849,6 @@
         <input type="text" id="newCatGroupInput" placeholder="カテゴリ名（例：食費）">
         <button onclick="addCatGroup()">追加</button>
       </div>
-      <div id="catGroupList" style="margin-bottom:8px;"></div>
       <div style="font-size:11px;color:var(--accent);margin-bottom:4px;">費目追加：</div>
       <div class="add-item-row">
         <select id="newCategoryGroupSel" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;-webkit-appearance:none;">
@@ -882,7 +887,6 @@
         <input type="text" id="newShopGroupInput" placeholder="カテゴリ名（例：コンビニ）">
         <button onclick="addShopGroup()">追加</button>
       </div>
-      <div id="shopGroupList" style="margin-bottom:8px;"></div>
       <div style="font-size:11px;color:var(--accent);margin-bottom:4px;">お店追加：</div>
       <div class="add-item-row">
         <select id="newShopGroupSel" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;-webkit-appearance:none;">
@@ -903,18 +907,8 @@
       <span>よく使う内訳項目</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
-      <div style="font-size:11px;color:var(--income);margin-bottom:6px;">カテゴリ追加：</div>
-      <div class="add-item-row add-item-row-group" style="margin-bottom:10px;">
-        <input type="text" id="newBreakdownGroupInput" placeholder="カテゴリ名（例：食材）">
-        <button onclick="addBreakdownGroup()">追加</button>
-      </div>
-      <div id="breakdownGroupList" style="margin-bottom:8px;"></div>
-      <div style="font-size:11px;color:var(--accent);margin-bottom:4px;">テンプレ追加：</div>
       <div class="add-item-row">
-        <select id="newBreakdownGroupSel" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;-webkit-appearance:none;">
-          <option value="">カテゴリなし</option>
-        </select>
-        <input type="text" id="newBreakdownTemplateInput" placeholder="内訳テンプレ名" style="flex:2;">
+        <input type="text" id="newBreakdownTemplateInput" placeholder="内訳テンプレ名">
         <button onclick="addBreakdownTemplate()">追加</button>
       </div>
       <div class="setting-list" id="breakdownTemplateList"></div>
@@ -1712,7 +1706,7 @@ let settings = {
   accounts: [],
   cards: [],
   badCategories: [],
-  breakdownGroups: [], breakdownTemplates: []
+  breakdownTemplates: []
 };
 let editingExpenseId = null;
 let editingIncomeId = null;
@@ -1887,7 +1881,7 @@ function loadSettings() {
   return new Promise((resolve) => {
     let firstFire = true;
     onSnapshot(collection(db, 'kakeibo_settings'), (snap) => {
-      settings = { categories:[], catGroups:[], incomeTypes:[], shops:[], shopGroups:[], accounts:[], cards:[], badCategories:[], breakdownGroups:[], breakdownTemplates:[] };
+      settings = { categories:[], catGroups:[], incomeTypes:[], shops:[], shopGroups:[], accounts:[], cards:[], badCategories:[], breakdownTemplates:[] };
       snap.forEach(d => {
         const data = { id: d.id, ...d.data() };
         if (data._type === 'category') settings.categories.push(data);
@@ -1898,10 +1892,9 @@ function loadSettings() {
         else if (data._type === 'account') settings.accounts.push(data);
         else if (data._type === 'card') settings.cards.push(data);
         else if (data._type === 'badCategory') settings.badCategories.push(data);
-        else if (data._type === 'breakdownGroup') settings.breakdownGroups.push(data);
         else if (data._type === 'breakdownTemplate') settings.breakdownTemplates.push(data);
       });
-      ['categories','catGroups','incomeTypes','shops','shopGroups','accounts','cards','badCategories','breakdownGroups','breakdownTemplates'].forEach(k => {
+      ['categories','catGroups','incomeTypes','shops','shopGroups','accounts','cards','badCategories','breakdownTemplates'].forEach(k => {
         settings[k].sort((a,b) => (a.order||0) - (b.order||0));
       });
       renderSettings();
@@ -1948,13 +1941,6 @@ function populateSelects() {
   const shopGSel = document.getElementById('newShopGroupSel');
   shopGSel.innerHTML = '<option value="">カテゴリなし</option>';
   settings.shopGroups.forEach(g => { shopGSel.innerHTML += `<option value="${g.id}">${g.name}</option>`; });
-
-  // 内訳テンプレカテゴリ選択（設定）
-  const bdGroupSel = document.getElementById('newBreakdownGroupSel');
-  if (bdGroupSel) {
-    bdGroupSel.innerHTML = '<option value="">カテゴリなし</option>';
-    settings.breakdownGroups.forEach(g => { bdGroupSel.innerHTML += `<option value="${g.id}">${g.name}</option>`; });
-  }
 
   // カード
   ['exp-cardId','cp-cardId','cf-cardId'].forEach(id => {
@@ -3264,7 +3250,7 @@ window.saveExpense = async () => {
     }
   });
   for (const name of tmplRegistrations) {
-    await addDoc(collection(db, 'kakeibo_settings'), { _type:'breakdownTemplate', name, groupId: null, order: settings.breakdownTemplates.length });
+    await addDoc(collection(db, 'kakeibo_settings'), { _type:'breakdownTemplate', name, order: settings.breakdownTemplates.length });
   }
 
   const noReceipt = document.getElementById('exp-noReceipt').checked;
@@ -3393,7 +3379,8 @@ function appendBreakdownRow(b = {}) {
   row.className = 'breakdown-row';
   row.innerHTML = `
     <select class="breakdown-tmpl-sel" onchange="applyBreakdownTemplate(this)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;outline:none;margin-bottom:6px;">
-      <option value="">テンプレから選択</option>
+      <option value="">-- テンプレから選択 --</option>
+      ${settings.breakdownTemplates.filter(t=>!t.hidden).map(t=>`<option value="${t.id}" data-name="${t.name}">${t.name}</option>`).join('')}
     </select>
     <div class="breakdown-row-top">
       <input type="text" placeholder="項目名" value="${b.name||''}">
@@ -3419,16 +3406,6 @@ function appendBreakdownRow(b = {}) {
   populateBadCategorySel(badSel);
   if (b.isBad && b.badCategory) badSel.value = b.badCategory;
   const tmplSel = row.querySelector('.breakdown-tmpl-sel');
-  settings.breakdownGroups.forEach(g => {
-    const items = settings.breakdownTemplates.filter(t => t.groupId === g.id);
-    if (items.length) {
-      tmplSel.innerHTML += `<optgroup label="${g.name}">` +
-        items.map(t => `<option value="${t.id}">${t.name}</option>`).join('') + '</optgroup>';
-    }
-  });
-  settings.breakdownTemplates.filter(t => !t.groupId).forEach(t => {
-    tmplSel.innerHTML += `<option value="${t.id}">${t.name}</option>`;
-  });
   if (b.templateId) tmplSel.value = b.templateId;
   document.getElementById('expBreakdownList').appendChild(row);
 }
@@ -3646,33 +3623,30 @@ window.toggleShowHidden = (type) => {
   renderSettings();
 };
 
-function renderSettings() {
-  // 費目グループ
-  const catGContainer = document.getElementById('catGroupList');
-  catGContainer.innerHTML = settings.catGroups.map(g => `
-    <div class="setting-item">
-      <div class="setting-item-name" style="color:var(--text);">📁 ${g.name}</div>
-      <button class="btn-icon-del" onclick="deleteSettingItem('${g.id}','catGroup')">🗑️</button>
-    </div>
-  `).join('');
+window.toggleGroupAccordion = (header, lsKey) => {
+  const body = header.nextElementSibling;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  const arrow = header.querySelector('.group-arrow');
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
+  if (lsKey) localStorage.setItem(lsKey, String(!isOpen));
+};
 
-  // 費目（非表示トグル制御）
+function renderSettings() {
+  // 費目（カテゴリ別アコーディオン）
   const catContainer = document.getElementById('categoryList');
   const showHiddenCats = localStorage.getItem('showHidden_categories') === 'true';
   const catBtn = document.getElementById('toggleHidden_categories');
   if (catBtn) catBtn.textContent = showHiddenCats ? '👁 非表示項目を隠す' : '👁 非表示項目を表示する';
-  const sortedCats = showHiddenCats
-    ? [...settings.categories.filter(x => !x.hidden), ...settings.categories.filter(x => x.hidden)]
-    : settings.categories.filter(x => !x.hidden);
-  catContainer.innerHTML = sortedCats.map(item => {
+
+  const renderCatItemRows = (items) => items.map(item => {
     const i = settings.categories.indexOf(item);
-    const groupName = item.groupId ? settings.catGroups.find(g => g.id === item.groupId)?.name || '' : '';
     return `<div class="setting-item${item.hidden?' setting-item-hidden':''}">
       <div style="display:flex;gap:2px;">
         <button class="btn-order" onclick="moveSettingItem('category',${i},-1)">▲</button>
         <button class="btn-order" onclick="moveSettingItem('category',${i},1)">▼</button>
       </div>
-      <div class="setting-item-name">${item.name}${groupName?` <span style="font-size:10px;color:var(--text2);">[${groupName}]</span>`:''}</div>
+      <div class="setting-item-name">${item.name}</div>
       <label style="display:flex;align-items:center;gap:2px;font-size:10px;color:var(--text2);cursor:pointer;white-space:nowrap;">
         <input type="checkbox" ${item.hidden?'checked':''} onchange="toggleSettingHidden('${item.id}',this.checked)">非表示
       </label>
@@ -3681,35 +3655,59 @@ function renderSettings() {
     </div>`;
   }).join('');
 
+  let catHtml = '';
+  settings.catGroups.forEach(g => {
+    const visible = settings.categories.filter(c => c.groupId === g.id && !c.hidden);
+    const hidden = settings.categories.filter(c => c.groupId === g.id && c.hidden);
+    const items = showHiddenCats ? [...visible, ...hidden] : visible;
+    const isOpen = localStorage.getItem(`catGroupOpen_${g.id}`) !== 'false';
+    catHtml += `<div class="group-accordion">
+      <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'catGroupOpen_${g.id}')">
+        <span>📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button class="btn-icon-del" onclick="event.stopPropagation();deleteSettingItem('${g.id}','catGroup')">🗑️</button>
+          <span class="group-arrow" style="font-size:11px;">${isOpen?'▲':'▼'}</span>
+        </div>
+      </div>
+      <div style="display:${isOpen?'block':'none'};padding:2px 4px 4px;">
+        ${items.length ? renderCatItemRows(items) : '<div style="font-size:12px;color:var(--text2);padding:6px 8px;">（費目なし）</div>'}
+      </div>
+    </div>`;
+  });
+  const ungroupedVisible = settings.categories.filter(c => !c.groupId && !c.hidden);
+  const ungroupedHidden = settings.categories.filter(c => !c.groupId && c.hidden);
+  const ungroupedCats = showHiddenCats ? [...ungroupedVisible, ...ungroupedHidden] : ungroupedVisible;
+  if (ungroupedCats.length) {
+    const isOpen = localStorage.getItem('catGroupOpen_none') !== 'false';
+    catHtml += `<div class="group-accordion">
+      <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'catGroupOpen_none')">
+        <span>📁 カテゴリなし <span class="group-badge">${ungroupedVisible.length}</span></span>
+        <span class="group-arrow" style="font-size:11px;">${isOpen?'▲':'▼'}</span>
+      </div>
+      <div style="display:${isOpen?'block':'none'};padding:2px 4px 4px;">
+        ${renderCatItemRows(ungroupedCats)}
+      </div>
+    </div>`;
+  }
+  catContainer.innerHTML = catHtml;
+
   // 収入項目
   renderSimpleSettingList('incomeTypeList', settings.incomeTypes, 'incomeType');
 
-  // お店グループ
-  const shopGContainer = document.getElementById('shopGroupList');
-  shopGContainer.innerHTML = settings.shopGroups.map(g => `
-    <div class="setting-item">
-      <div class="setting-item-name" style="color:var(--text);">📁 ${g.name}</div>
-      <button class="btn-icon-del" onclick="deleteSettingItem('${g.id}','shopGroup')">🗑️</button>
-    </div>
-  `).join('');
-
-  // お店（非表示トグル制御）
+  // お店（カテゴリ別アコーディオン）
   const shopContainer = document.getElementById('shopList');
   const showHiddenShops = localStorage.getItem('showHidden_shops') === 'true';
   const shopBtn = document.getElementById('toggleHidden_shops');
   if (shopBtn) shopBtn.textContent = showHiddenShops ? '👁 非表示項目を隠す' : '👁 非表示項目を表示する';
-  const sortedShops = showHiddenShops
-    ? [...settings.shops.filter(x => !x.hidden), ...settings.shops.filter(x => x.hidden)]
-    : settings.shops.filter(x => !x.hidden);
-  shopContainer.innerHTML = sortedShops.map(item => {
+
+  const renderShopItemRows = (items) => items.map(item => {
     const i = settings.shops.indexOf(item);
-    const groupName = item.groupId ? settings.shopGroups.find(g => g.id === item.groupId)?.name || '' : '';
     return `<div class="setting-item${item.hidden?' setting-item-hidden':''}">
       <div style="display:flex;gap:2px;">
         <button class="btn-order" onclick="moveSettingItem('shop',${i},-1)">▲</button>
         <button class="btn-order" onclick="moveSettingItem('shop',${i},1)">▼</button>
       </div>
-      <div class="setting-item-name">${item.name}${groupName?` <span style="font-size:10px;color:var(--text2);">[${groupName}]</span>`:''}</div>
+      <div class="setting-item-name">${item.name}</div>
       <label style="display:flex;align-items:center;gap:2px;font-size:10px;color:var(--text2);cursor:pointer;white-space:nowrap;">
         <input type="checkbox" ${item.hidden?'checked':''} onchange="toggleSettingHidden('${item.id}',this.checked)">非表示
       </label>
@@ -3717,6 +3715,42 @@ function renderSettings() {
       <button class="btn-icon-del" onclick="deleteSettingItem('${item.id}','shop')">🗑️</button>
     </div>`;
   }).join('');
+
+  let shopHtml = '';
+  settings.shopGroups.forEach(g => {
+    const visible = settings.shops.filter(s => s.groupId === g.id && !s.hidden);
+    const hidden = settings.shops.filter(s => s.groupId === g.id && s.hidden);
+    const items = showHiddenShops ? [...visible, ...hidden] : visible;
+    const isOpen = localStorage.getItem(`shopGroupOpen_${g.id}`) !== 'false';
+    shopHtml += `<div class="group-accordion">
+      <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'shopGroupOpen_${g.id}')">
+        <span>📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button class="btn-icon-del" onclick="event.stopPropagation();deleteSettingItem('${g.id}','shopGroup')">🗑️</button>
+          <span style="font-size:11px;">${isOpen?'▲':'▼'}</span>
+        </div>
+      </div>
+      <div style="display:${isOpen?'block':'none'};padding:2px 4px 4px;">
+        ${items.length ? renderShopItemRows(items) : '<div style="font-size:12px;color:var(--text2);padding:6px 8px;">（お店なし）</div>'}
+      </div>
+    </div>`;
+  });
+  const ungroupedShopVisible = settings.shops.filter(s => !s.groupId && !s.hidden);
+  const ungroupedShopHidden = settings.shops.filter(s => !s.groupId && s.hidden);
+  const ungroupedShops = showHiddenShops ? [...ungroupedShopVisible, ...ungroupedShopHidden] : ungroupedShopVisible;
+  if (ungroupedShops.length) {
+    const isOpen = localStorage.getItem('shopGroupOpen_none') !== 'false';
+    shopHtml += `<div class="group-accordion">
+      <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'shopGroupOpen_none')">
+        <span>📁 カテゴリなし <span class="group-badge">${ungroupedShopVisible.length}</span></span>
+        <span class="group-arrow" style="font-size:11px;">${isOpen?'▲':'▼'}</span>
+      </div>
+      <div style="display:${isOpen?'block':'none'};padding:2px 4px 4px;">
+        ${renderShopItemRows(ungroupedShops)}
+      </div>
+    </div>`;
+  }
+  shopContainer.innerHTML = shopHtml;
 
   // 口座（非表示トグル制御）
   const accContainer = document.getElementById('accountSettingList');
@@ -3762,17 +3796,6 @@ function renderSettings() {
   `).join('');
   // BAD
   renderSimpleSettingList('badCategoryList', settings.badCategories, 'badCategory');
-
-  // 内訳テンプレカテゴリ
-  const bdGroupContainer = document.getElementById('breakdownGroupList');
-  if (bdGroupContainer) {
-    bdGroupContainer.innerHTML = settings.breakdownGroups.map(g => `
-      <div class="setting-item">
-        <div class="setting-item-name" style="color:var(--text);">📁 ${g.name}</div>
-        <button class="btn-icon-del" onclick="deleteSettingItem('${g.id}','breakdownGroup')">🗑️</button>
-      </div>
-    `).join('');
-  }
   // 内訳テンプレ
   renderSimpleSettingList('breakdownTemplateList', settings.breakdownTemplates, 'breakdownTemplate');
 }
@@ -3880,21 +3903,11 @@ window.addBadCategory = async () => {
   input.value = '';
 };
 
-window.addBreakdownGroup = async () => {
-  const input = document.getElementById('newBreakdownGroupInput');
-  const name = input.value.trim();
-  if (!name) return;
-  await addDoc(collection(db, 'kakeibo_settings'), { _type:'breakdownGroup', name, order: settings.breakdownGroups.length });
-  input.value = '';
-};
-
 window.addBreakdownTemplate = async () => {
   const input = document.getElementById('newBreakdownTemplateInput');
-  const groupSel = document.getElementById('newBreakdownGroupSel');
   const name = input.value.trim();
   if (!name) return;
-  const groupId = groupSel ? groupSel.value : '';
-  await addDoc(collection(db, 'kakeibo_settings'), { _type:'breakdownTemplate', name, groupId: groupId || null, order: settings.breakdownTemplates.length });
+  await addDoc(collection(db, 'kakeibo_settings'), { _type:'breakdownTemplate', name, order: settings.breakdownTemplates.length });
   input.value = '';
 };
 
@@ -3931,14 +3944,14 @@ window.openSettingEditModal = (id, type) => {
   document.getElementById('editSettingName').value = item.name;
   const groupRow = document.getElementById('editSettingGroupRow');
   const groupSel = document.getElementById('editSettingGroupSel');
-  const noGroupTypes = ['badCategory', 'incomeType', 'card'];
+  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'breakdownTemplate'];
   if (noGroupTypes.includes(type)) {
     groupRow.style.display = 'none';
     groupSel.innerHTML = '';
   } else {
     groupRow.style.display = '';
     groupSel.innerHTML = '<option value="">カテゴリなし</option>';
-    const groups = type === 'category' ? settings.catGroups : (type === 'breakdownTemplate' ? settings.breakdownGroups : settings.shopGroups);
+    const groups = type === 'category' ? settings.catGroups : settings.shopGroups;
     groups.forEach(g => {
       groupSel.innerHTML += `<option value="${g.id}"${item.groupId === g.id ? ' selected' : ''}>${g.name}</option>`;
     });
@@ -3991,7 +4004,7 @@ window.moveSettingItem = async (type, i, delta) => {
   const map = {
     category:'categories', catGroup:'catGroups', incomeType:'incomeTypes',
     shop:'shops', shopGroup:'shopGroups', account:'accounts', card:'cards', badCategory:'badCategories',
-    breakdownGroup:'breakdownGroups', breakdownTemplate:'breakdownTemplates'
+    breakdownTemplate:'breakdownTemplates'
   };
   const arr = settings[map[type]];
   const j = i + delta;
