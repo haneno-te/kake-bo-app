@@ -3297,28 +3297,23 @@ window.saveExpense = async () => {
   if (!amount || !date) { alert('金額と日付は必須です'); return; }
 
   const breakdowns = [];
-  const tmplRegistrations = [];
   document.querySelectorAll('#expBreakdownList .breakdown-row').forEach(row => {
     const nameInput = row.querySelector('input[type=text]');
     const amtInput = row.querySelector('input[type=number]');
     const badCheck = row.querySelector('.bad-check');
     const badSel = row.querySelector('.bad-cat-sel');
-    const tmplSel = row.querySelector('.breakdown-tmpl-sel');
-    const registerCheck = row.querySelector('.register-tmpl-check');
+    const itemSel = row.querySelector('.bd-item-sel');
+    const catSel = row.querySelector('.bd-cat-sel');
     const name = nameInput ? nameInput.value.trim() : '';
     const amt = amtInput ? parseInt(amtInput.value) || 0 : 0;
     const isBad = badCheck ? badCheck.checked : false;
     const badCategory = (isBad && badSel) ? badSel.value : '';
-    const templateId = tmplSel ? tmplSel.value : '';
-    const doRegister = registerCheck ? registerCheck.checked : false;
+    const bdItemId = itemSel ? itemSel.value : '';
+    const bdCatGroupId = catSel ? catSel.value : '';
     if (name || amt) {
-      breakdowns.push({ name, amount: amt, isBad, badCategory, templateId });
-      if (doRegister && name && !templateId) tmplRegistrations.push(name);
+      breakdowns.push({ name, amount: amt, isBad, badCategory, bdItemId, bdCatGroupId });
     }
   });
-  for (const name of tmplRegistrations) {
-    await addDoc(collection(db, 'kakeibo_settings'), { _type:'breakdownTemplate', name, order: settings.breakdownTemplates.length });
-  }
 
   const noReceipt = document.getElementById('exp-noReceipt').checked;
   const data = {
@@ -3445,9 +3440,14 @@ function appendBreakdownRow(b = {}) {
   const row = document.createElement('div');
   row.className = 'breakdown-row';
   row.innerHTML = `
-    <select class="breakdown-tmpl-sel" onchange="applyBreakdownTemplate(this)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;outline:none;margin-bottom:6px;">
-      <option value="">-- テンプレから選択 --</option>
-      ${settings.breakdownTemplates.filter(t=>!t.hidden).map(t=>`<option value="${t.id}" data-name="${t.name}">${t.name}</option>`).join('')}
+    <select class="bd-cat-sel" onchange="onBdCatChange(this)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;outline:none;margin-bottom:4px;">
+      <option value="">-- カテゴリを選択 --</option>
+      ${settings.bdCatGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
+      <option value="__none__">カテゴリなし</option>
+    </select>
+    <select class="bd-item-sel" onchange="onBdItemChange(this)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;outline:none;margin-bottom:6px;">
+      <option value="">-- 細目を選択 --</option>
+      ${settings.bdItems.map(i => `<option value="${i.id}" data-name="${i.name}" data-group="${i.groupId||''}">${i.name}</option>`).join('')}
     </select>
     <div class="breakdown-row-top">
       <input type="text" placeholder="項目名" value="${b.name||''}">
@@ -3461,10 +3461,6 @@ function appendBreakdownRow(b = {}) {
     <div class="bad-category-wrap" style="display:${b.isBad?'block':'none'};margin-top:8px;">
       <select class="bad-cat-sel" style="width:100%;background:var(--bg);border:1px solid var(--bad);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;"></select>
     </div>
-    <label class="bad-row-toggle" style="margin-top:4px;">
-      <input type="checkbox" class="register-tmpl-check">
-      <span>💾 テンプレ登録</span>
-    </label>
   `;
   const textInput = row.querySelector('input[type="text"]');
   textInput.addEventListener('compositionstart', () => { isComposing = true; });
@@ -3472,12 +3468,37 @@ function appendBreakdownRow(b = {}) {
   const badSel = row.querySelector('.bad-cat-sel');
   populateBadCategorySel(badSel);
   if (b.isBad && b.badCategory) badSel.value = b.badCategory;
-  const tmplSel = row.querySelector('.breakdown-tmpl-sel');
-  if (b.templateId) tmplSel.value = b.templateId;
+  if (b.bdCatGroupId) row.querySelector('.bd-cat-sel').value = b.bdCatGroupId;
+  if (b.bdItemId) row.querySelector('.bd-item-sel').value = b.bdItemId;
   document.getElementById('expBreakdownList').appendChild(row);
 }
 
 window.addBreakdownRow = () => appendBreakdownRow();
+
+window.onBdCatChange = (catSel) => {
+  const groupId = catSel.value;
+  const row = catSel.closest('.breakdown-row');
+  const itemSel = row.querySelector('.bd-item-sel');
+  Array.from(itemSel.options).forEach(opt => {
+    if (!opt.value) return;
+    if (groupId === '' || groupId === '__none__') {
+      opt.style.display = '';
+    } else {
+      opt.style.display = (opt.dataset.group === groupId) ? '' : 'none';
+    }
+  });
+  itemSel.value = '';
+  const nameInput = row.querySelector('input[type=text]');
+  if (nameInput) nameInput.value = '';
+};
+
+window.onBdItemChange = (itemSel) => {
+  const opt = itemSel.options[itemSel.selectedIndex];
+  if (!opt || !opt.value) return;
+  const row = itemSel.closest('.breakdown-row');
+  const nameInput = row.querySelector('input[type=text]');
+  if (nameInput) nameInput.value = opt.dataset.name || '';
+};
 
 window.applyBreakdownTemplate = (sel) => {
   const id = sel.value;
