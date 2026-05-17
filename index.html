@@ -1560,8 +1560,9 @@
       <div class="modal-title" id="initBalModalTitle">初期残高を設定</div>
       <button class="modal-close" onclick="closeModal('initBalModal')">×</button>
     </div>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">
-      口座管理を始める起点の残高を入力してください。
+    <div class="form-row">
+      <label class="form-label">口座名</label>
+      <input type="text" class="form-input" id="initBal-name" placeholder="口座名">
     </div>
     <div class="form-row">
       <label class="form-label">起点日</label>
@@ -3821,7 +3822,8 @@ let _initBalAccountId = null;
 
 window.openInitBalModal = (id, name, currentBal, currentDate = '') => {
   _initBalAccountId = id;
-  document.getElementById('initBalModalTitle').textContent = `初期残高：${name}`;
+  document.getElementById('initBalModalTitle').textContent = `口座を編集：${name}`;
+  document.getElementById('initBal-name').value = name;
   calcState['initBal'] = String(currentBal || ''); calcUpdate('initBal');
   document.getElementById('initBal-date').value = currentDate || todayStr();
   openModal('initBalModal');
@@ -3829,14 +3831,17 @@ window.openInitBalModal = (id, name, currentBal, currentDate = '') => {
 
 window.saveInitBal = async () => {
   if (!_initBalAccountId) return;
+  const name = document.getElementById('initBal-name').value.trim();
+  if (!name) { alert('口座名を入力してください'); return; }
   const bal = calcGetValue('initBal');
   const date = document.getElementById('initBal-date').value;
   await updateDoc(doc(db, 'kakeibo_settings', _initBalAccountId), {
+    name,
     initialBalance: bal,
     initialDate: date
   });
   closeModal('initBalModal');
-  showToast(`初期残高を¥${bal.toLocaleString()}に設定しました`);
+  showToast(`口座情報を更新しました`);
 };
 
 window.addCatGroup = async () => {
