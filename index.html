@@ -3120,7 +3120,23 @@ function renderSummary() {
   const totalCard = cardConfirmed.reduce((s,c) => s + (c.total||0), 0) +
     cardPools.filter(c => c.confirmedMonth === currentYM()).reduce((s,c) =>
       s + (c.installType === 'installment' ? (c.installAmt||0) : (c.amount||0)), 0);
-  const totalFixed = fixedCosts.reduce((s,f) => s + (f.actualAmount || f.amount || 0), 0);
+  const ym = currentYM();
+  const ymStart = ym + '-01';
+  const nextM = currentMonth === 12
+    ? `${currentYear+1}-01-01`
+    : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+  const totalFixed = fixedCosts.reduce((s,f) => {
+    if (f.payMethod === 'card') {
+      return s + cardPools
+        .filter(p => p.fixedCostId === f.id && p.month === ym)
+        .reduce((a,p) => a + (p.installType === 'installment' ? (p.installAmt||0) : (p.amount||0)), 0);
+    } else if (f.payMethod === 'transfer' || f.payMethod === 'cash') {
+      return s + expenses
+        .filter(e => e.fixedCostId === f.id && e.date >= ymStart && e.date < nextM)
+        .reduce((a,e) => a + (e.amount||0), 0);
+    }
+    return s;
+  }, 0);
   const balance = totalInc - totalExp - totalCard - totalFixed;
 
   const totalFee = expenses.filter(e => e.memo === '銀行手数料').reduce((s,e) => s + (e.amount||0), 0);
