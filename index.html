@@ -3766,7 +3766,7 @@ function renderSettings() {
           <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('catGroup',${catIdx},-1)">▲</button>
           <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('catGroup',${catIdx},1)">▼</button>
         </div>
-        <span>📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
+        <span style="flex:1;">📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
         <div style="display:flex;align-items:center;gap:4px;">
           <button class="btn-icon-edit" onclick="event.stopPropagation();openSettingEditModal('${g.id}','catGroup')">✏️</button>
           <button class="btn-icon-del" onclick="event.stopPropagation();deleteSettingItem('${g.id}','catGroup')">🗑️</button>
@@ -3833,7 +3833,7 @@ function renderSettings() {
           <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('shopGroup',${sgIdx},-1)">▲</button>
           <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('shopGroup',${sgIdx},1)">▼</button>
         </div>
-        <span>📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
+        <span style="flex:1;">📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
         <div style="display:flex;align-items:center;gap:4px;">
           <button class="btn-icon-edit" onclick="event.stopPropagation();openSettingEditModal('${g.id}','shopGroup')">✏️</button>
           <button class="btn-icon-del" onclick="event.stopPropagation();deleteSettingItem('${g.id}','shopGroup')">🗑️</button>
@@ -3933,7 +3933,7 @@ function renderSettings() {
             <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('bdCatGroup',${bdIdx},-1)">▲</button>
             <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('bdCatGroup',${bdIdx},1)">▼</button>
           </div>
-          <span>📁 ${g.name} <span class="group-badge">${items.length}</span></span>
+          <span style="flex:1;">📁 ${g.name} <span class="group-badge">${items.length}</span></span>
           <div style="display:flex;align-items:center;gap:4px;">
             <button class="btn-icon-edit" onclick="event.stopPropagation();openSettingEditModal('${g.id}','bdCatGroup')">✏️</button>
             <button class="btn-icon-del" onclick="event.stopPropagation();deleteSettingItem('${g.id}','bdCatGroup')">🗑️</button>
