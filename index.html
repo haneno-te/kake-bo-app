@@ -3225,28 +3225,50 @@ function renderSummary() {
       : '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">支出データなし</div>';
   }
 
-  // 内訳別集計
-  const bdMap = {};
+  // 内訳別集計（カテゴリアコーディオン）
+  const bdCatMap = {};
   expenses.forEach(e => {
     (e.breakdowns || []).forEach(b => {
-      const key = b.name || '（名前なし）';
-      if (!bdMap[key]) bdMap[key] = { total: 0, count: 0, isBad: false };
-      bdMap[key].total += b.amount || 0;
-      bdMap[key].count++;
-      if (b.isBad) bdMap[key].isBad = true;
+      const catId = b.bdCatGroupId || '__none__';
+      const catName = settings.bdCatGroups.find(g => g.id === catId)?.name || 'カテゴリなし';
+      const itemName = b.name || '（名前なし）';
+      if (!bdCatMap[catId]) bdCatMap[catId] = { name: catName, total: 0, items: {} };
+      bdCatMap[catId].total += b.amount || 0;
+      if (!bdCatMap[catId].items[itemName]) bdCatMap[catId].items[itemName] = { total: 0, count: 0 };
+      bdCatMap[catId].items[itemName].total += b.amount || 0;
+      bdCatMap[catId].items[itemName].count++;
     });
   });
   const bdEl = document.getElementById('breakdownSummary');
   if (bdEl) {
-    const sorted = Object.entries(bdMap).sort((a, b) => b[1].total - a[1].total);
-    bdEl.innerHTML = sorted.length > 0
-      ? sorted.map(([name, v]) => `<div class="stat-row">
-          <span class="stat-label">${v.isBad ? '👿 ' : ''}${name}（${v.count}件）</span>
-          <span class="stat-value" style="color:${v.isBad ? 'var(--bad)' : 'var(--expense)'};">
-            ¥${v.total.toLocaleString()}
-          </span>
-        </div>`).join('')
-      : '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">内訳データなし</div>';
+    const entries = Object.entries(bdCatMap).sort((a, b) => b[1].total - a[1].total);
+    if (entries.length === 0) {
+      bdEl.innerHTML = '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">内訳データなし</div>';
+    } else {
+      bdEl.innerHTML = entries.map(([catId, cat], idx) => {
+        const itemsHtml = Object.entries(cat.items)
+          .sort((a, b) => b[1].total - a[1].total)
+          .map(([name, v]) => `
+            <div class="stat-row" style="padding-left:12px;">
+              <span class="stat-label" style="font-size:12px;">${name}（${v.count}件）</span>
+              <span class="stat-value" style="color:var(--expense);font-size:12px;">¥${v.total.toLocaleString()}</span>
+            </div>
+          `).join('');
+        return `
+          <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden;">
+            <div style="display:flex;justify-content:space-between;align-items:center;
+              padding:10px 12px;cursor:pointer;background:var(--surface2);"
+              onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+              <span style="font-size:13px;font-weight:700;">${cat.name}</span>
+              <span style="color:var(--expense);font-weight:700;">¥${cat.total.toLocaleString()}</span>
+            </div>
+            <div style="display:none;padding:4px 0;">
+              ${itemsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
   }
 }
 
