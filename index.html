@@ -900,6 +900,29 @@
 
   <div class="accordion-section">
     <div class="accordion-header" onclick="toggleAccordion(this)">
+      <span>よく使う内訳項目</span><span class="accordion-arrow">▼</span>
+    </div>
+    <div class="accordion-body" style="display:none;">
+      <div style="font-size:11px;color:var(--income);margin-bottom:6px;">カテゴリ追加：</div>
+      <div class="add-item-row add-item-row-group" style="margin-bottom:10px;">
+        <input type="text" id="newBreakdownGroupInput" placeholder="カテゴリ名（例：食材）">
+        <button onclick="addBreakdownGroup()">追加</button>
+      </div>
+      <div id="breakdownGroupList" style="margin-bottom:8px;"></div>
+      <div style="font-size:11px;color:var(--accent);margin-bottom:4px;">テンプレ追加：</div>
+      <div class="add-item-row">
+        <select id="newBreakdownGroupSel" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;-webkit-appearance:none;">
+          <option value="">カテゴリなし</option>
+        </select>
+        <input type="text" id="newBreakdownTemplateInput" placeholder="内訳テンプレ名" style="flex:2;">
+        <button onclick="addBreakdownTemplate()">追加</button>
+      </div>
+      <div class="setting-list" id="breakdownTemplateList"></div>
+    </div>
+  </div>
+
+  <div class="accordion-section">
+    <div class="accordion-header" onclick="toggleAccordion(this)">
       <span>銀行口座・現金</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
@@ -1688,7 +1711,8 @@ let settings = {
   shops: [], shopGroups: [],
   accounts: [],
   cards: [],
-  badCategories: []
+  badCategories: [],
+  breakdownGroups: [], breakdownTemplates: []
 };
 let editingExpenseId = null;
 let editingIncomeId = null;
@@ -1863,7 +1887,7 @@ function loadSettings() {
   return new Promise((resolve) => {
     let firstFire = true;
     onSnapshot(collection(db, 'kakeibo_settings'), (snap) => {
-      settings = { categories:[], catGroups:[], incomeTypes:[], shops:[], shopGroups:[], accounts:[], cards:[], badCategories:[] };
+      settings = { categories:[], catGroups:[], incomeTypes:[], shops:[], shopGroups:[], accounts:[], cards:[], badCategories:[], breakdownGroups:[], breakdownTemplates:[] };
       snap.forEach(d => {
         const data = { id: d.id, ...d.data() };
         if (data._type === 'category') settings.categories.push(data);
@@ -1874,8 +1898,10 @@ function loadSettings() {
         else if (data._type === 'account') settings.accounts.push(data);
         else if (data._type === 'card') settings.cards.push(data);
         else if (data._type === 'badCategory') settings.badCategories.push(data);
+        else if (data._type === 'breakdownGroup') settings.breakdownGroups.push(data);
+        else if (data._type === 'breakdownTemplate') settings.breakdownTemplates.push(data);
       });
-      ['categories','catGroups','incomeTypes','shops','shopGroups','accounts','cards','badCategories'].forEach(k => {
+      ['categories','catGroups','incomeTypes','shops','shopGroups','accounts','cards','badCategories','breakdownGroups','breakdownTemplates'].forEach(k => {
         settings[k].sort((a,b) => (a.order||0) - (b.order||0));
       });
       renderSettings();
@@ -1922,6 +1948,13 @@ function populateSelects() {
   const shopGSel = document.getElementById('newShopGroupSel');
   shopGSel.innerHTML = '<option value="">カテゴリなし</option>';
   settings.shopGroups.forEach(g => { shopGSel.innerHTML += `<option value="${g.id}">${g.name}</option>`; });
+
+  // 内訳テンプレカテゴリ選択（設定）
+  const bdGroupSel = document.getElementById('newBreakdownGroupSel');
+  if (bdGroupSel) {
+    bdGroupSel.innerHTML = '<option value="">カテゴリなし</option>';
+    settings.breakdownGroups.forEach(g => { bdGroupSel.innerHTML += `<option value="${g.id}">${g.name}</option>`; });
+  }
 
   // カード
   ['exp-cardId','cp-cardId','cf-cardId'].forEach(id => {
@@ -3211,17 +3244,28 @@ window.saveExpense = async () => {
   if (!amount || !date) { alert('金額と日付は必須です'); return; }
 
   const breakdowns = [];
+  const tmplRegistrations = [];
   document.querySelectorAll('#expBreakdownList .breakdown-row').forEach(row => {
     const nameInput = row.querySelector('input[type=text]');
     const amtInput = row.querySelector('input[type=number]');
     const badCheck = row.querySelector('.bad-check');
     const badSel = row.querySelector('.bad-cat-sel');
+    const tmplSel = row.querySelector('.breakdown-tmpl-sel');
+    const registerCheck = row.querySelector('.register-tmpl-check');
     const name = nameInput ? nameInput.value.trim() : '';
     const amt = amtInput ? parseInt(amtInput.value) || 0 : 0;
     const isBad = badCheck ? badCheck.checked : false;
     const badCategory = (isBad && badSel) ? badSel.value : '';
-    if (name || amt) breakdowns.push({ name, amount: amt, isBad, badCategory });
+    const templateId = tmplSel ? tmplSel.value : '';
+    const doRegister = registerCheck ? registerCheck.checked : false;
+    if (name || amt) {
+      breakdowns.push({ name, amount: amt, isBad, badCategory, templateId });
+      if (doRegister && name && !templateId) tmplRegistrations.push(name);
+    }
   });
+  for (const name of tmplRegistrations) {
+    await addDoc(collection(db, 'kakeibo_settings'), { _type:'breakdownTemplate', name, groupId: null, order: settings.breakdownTemplates.length });
+  }
 
   const noReceipt = document.getElementById('exp-noReceipt').checked;
   const data = {
@@ -3348,6 +3392,9 @@ function appendBreakdownRow(b = {}) {
   const row = document.createElement('div');
   row.className = 'breakdown-row';
   row.innerHTML = `
+    <select class="breakdown-tmpl-sel" onchange="applyBreakdownTemplate(this)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;outline:none;margin-bottom:6px;">
+      <option value="">テンプレから選択</option>
+    </select>
     <div class="breakdown-row-top">
       <input type="text" placeholder="項目名" value="${b.name||''}">
       <input type="number" placeholder="金額" value="${b.amount||''}">
@@ -3360,17 +3407,44 @@ function appendBreakdownRow(b = {}) {
     <div class="bad-category-wrap" style="display:${b.isBad?'block':'none'};margin-top:8px;">
       <select class="bad-cat-sel" style="width:100%;background:var(--bg);border:1px solid var(--bad);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;"></select>
     </div>
+    <label class="bad-row-toggle" style="margin-top:4px;">
+      <input type="checkbox" class="register-tmpl-check">
+      <span>💾 テンプレ登録</span>
+    </label>
   `;
   const textInput = row.querySelector('input[type="text"]');
   textInput.addEventListener('compositionstart', () => { isComposing = true; });
   textInput.addEventListener('compositionend', () => { isComposing = false; });
-  const sel = row.querySelector('.bad-cat-sel');
-  populateBadCategorySel(sel);
-  if (b.isBad && b.badCategory) sel.value = b.badCategory;
+  const badSel = row.querySelector('.bad-cat-sel');
+  populateBadCategorySel(badSel);
+  if (b.isBad && b.badCategory) badSel.value = b.badCategory;
+  const tmplSel = row.querySelector('.breakdown-tmpl-sel');
+  settings.breakdownGroups.forEach(g => {
+    const items = settings.breakdownTemplates.filter(t => t.groupId === g.id);
+    if (items.length) {
+      tmplSel.innerHTML += `<optgroup label="${g.name}">` +
+        items.map(t => `<option value="${t.id}">${t.name}</option>`).join('') + '</optgroup>';
+    }
+  });
+  settings.breakdownTemplates.filter(t => !t.groupId).forEach(t => {
+    tmplSel.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+  });
+  if (b.templateId) tmplSel.value = b.templateId;
   document.getElementById('expBreakdownList').appendChild(row);
 }
 
 window.addBreakdownRow = () => appendBreakdownRow();
+
+window.applyBreakdownTemplate = (sel) => {
+  const id = sel.value;
+  if (!id) return;
+  const tmpl = settings.breakdownTemplates.find(t => t.id === id);
+  if (!tmpl) return;
+  const row = sel.closest('.breakdown-row');
+  const nameInput = row.querySelector('input[type=text]');
+  if (nameInput && !nameInput.value) nameInput.value = tmpl.name;
+};
+
 window.toggleBadRow = (checkbox) => {
   checkbox.closest('.breakdown-row').querySelector('.bad-category-wrap').style.display =
     checkbox.checked ? 'block' : 'none';
@@ -3688,6 +3762,19 @@ function renderSettings() {
   `).join('');
   // BAD
   renderSimpleSettingList('badCategoryList', settings.badCategories, 'badCategory');
+
+  // 内訳テンプレカテゴリ
+  const bdGroupContainer = document.getElementById('breakdownGroupList');
+  if (bdGroupContainer) {
+    bdGroupContainer.innerHTML = settings.breakdownGroups.map(g => `
+      <div class="setting-item">
+        <div class="setting-item-name" style="color:var(--text);">📁 ${g.name}</div>
+        <button class="btn-icon-del" onclick="deleteSettingItem('${g.id}','breakdownGroup')">🗑️</button>
+      </div>
+    `).join('');
+  }
+  // 内訳テンプレ
+  renderSimpleSettingList('breakdownTemplateList', settings.breakdownTemplates, 'breakdownTemplate');
 }
 
 function renderSimpleSettingList(containerId, items, type) {
@@ -3793,6 +3880,24 @@ window.addBadCategory = async () => {
   input.value = '';
 };
 
+window.addBreakdownGroup = async () => {
+  const input = document.getElementById('newBreakdownGroupInput');
+  const name = input.value.trim();
+  if (!name) return;
+  await addDoc(collection(db, 'kakeibo_settings'), { _type:'breakdownGroup', name, order: settings.breakdownGroups.length });
+  input.value = '';
+};
+
+window.addBreakdownTemplate = async () => {
+  const input = document.getElementById('newBreakdownTemplateInput');
+  const groupSel = document.getElementById('newBreakdownGroupSel');
+  const name = input.value.trim();
+  if (!name) return;
+  const groupId = groupSel ? groupSel.value : '';
+  await addDoc(collection(db, 'kakeibo_settings'), { _type:'breakdownTemplate', name, groupId: groupId || null, order: settings.breakdownTemplates.length });
+  input.value = '';
+};
+
 window.deleteSettingItem = (id, type) => {
   if (type === 'category') {
     const used = expenses.filter(e => e.categoryId === id);
@@ -3816,7 +3921,8 @@ let editingSettingType = null;
 window.openSettingEditModal = (id, type) => {
   const map = {
     category: 'categories', shop: 'shops',
-    badCategory: 'badCategories', incomeType: 'incomeTypes', card: 'cards'
+    badCategory: 'badCategories', incomeType: 'incomeTypes', card: 'cards',
+    breakdownTemplate: 'breakdownTemplates'
   };
   const item = settings[map[type]]?.find(x => x.id === id);
   if (!item) return;
@@ -3832,7 +3938,7 @@ window.openSettingEditModal = (id, type) => {
   } else {
     groupRow.style.display = '';
     groupSel.innerHTML = '<option value="">カテゴリなし</option>';
-    const groups = type === 'category' ? settings.catGroups : settings.shopGroups;
+    const groups = type === 'category' ? settings.catGroups : (type === 'breakdownTemplate' ? settings.breakdownGroups : settings.shopGroups);
     groups.forEach(g => {
       groupSel.innerHTML += `<option value="${g.id}"${item.groupId === g.id ? ' selected' : ''}>${g.name}</option>`;
     });
@@ -3884,7 +3990,8 @@ window.saveDeleteConfirmDefault = (val) => {
 window.moveSettingItem = async (type, i, delta) => {
   const map = {
     category:'categories', catGroup:'catGroups', incomeType:'incomeTypes',
-    shop:'shops', shopGroup:'shopGroups', account:'accounts', card:'cards', badCategory:'badCategories'
+    shop:'shops', shopGroup:'shopGroups', account:'accounts', card:'cards', badCategory:'badCategories',
+    breakdownGroup:'breakdownGroups', breakdownTemplate:'breakdownTemplates'
   };
   const arr = settings[map[type]];
   const j = i + delta;
