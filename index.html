@@ -1904,6 +1904,29 @@ window.toggleAccordion = (header) => {
   body.style.display = isOpen ? 'none' : 'block';
 };
 
+window.toggleUnpaidDetail = (id) => {
+  const d = document.getElementById(id);
+  if (!d) return;
+  const isHidden = d.style.display === 'none';
+  d.style.display = isHidden ? 'block' : 'none';
+  const arrow = document.getElementById(id + '_arrow');
+  if (arrow) arrow.style.transform = isHidden ? 'rotate(180deg)' : '';
+};
+
+window.goToCardAccordion = (cardId) => {
+  switchTab('card');
+  setTimeout(() => {
+    const el = document.querySelector(`[data-card-id="${cardId}"] .accordion-header`);
+    if (el) {
+      if (!el.classList.contains('open')) {
+        el.classList.add('open');
+        el.nextElementSibling.style.display = 'block';
+      }
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, 100);
+};
+
 // ===== 設定読み込み =====
 let _settingsInitialized = false;
 function loadSettings() {
@@ -3256,8 +3279,14 @@ function renderSummary() {
   const bdEl = document.getElementById('breakdownSummary');
   if (bdEl) {
     const entries = Object.entries(bdCatMap).sort((a, b) => b[1].total - a[1].total);
+    const badRow = totalBadAmt > 0
+      ? `<div class="stat-row" style="margin-top:4px;border-top:1px solid var(--border);padding-top:8px;">
+          <span class="stat-label">👿 無駄遣い</span>
+          <span class="stat-value" style="color:var(--bad);">¥${totalBadAmt.toLocaleString()}</span>
+        </div>`
+      : '';
     if (entries.length === 0) {
-      bdEl.innerHTML = '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">内訳データなし</div>';
+      bdEl.innerHTML = badRow || '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">内訳データなし</div>';
     } else {
       bdEl.innerHTML = entries.map(([catId, cat], idx) => {
         const itemsHtml = Object.entries(cat.items)
@@ -3281,7 +3310,7 @@ function renderSummary() {
             </div>
           </div>
         `;
-      }).join('');
+      }).join('') + badRow;
     }
   }
 
@@ -3317,20 +3346,54 @@ function renderSummary() {
     realBalDetailEl.textContent = `収支 ¥${balance.toLocaleString()} − 未払い残高 ¥${unpaidTotal.toLocaleString()}`;
   }
 
+  const getCardName = c => settings.cards.find(card => card.id === c.cardId)?.name || 'カード不明';
+  const unpaidItemRow = c => {
+    const amt = calcUnpaid(c);
+    return `<div style="padding:6px 8px 6px 14px;border-top:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="goToCardAccordion('${c.cardId}')"><div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.memo || '（内容なし）'}</div><div style="font-size:10px;color:var(--text2);">${getCardName(c)} | ${c.date}</div></div><span style="font-size:13px;font-weight:700;color:var(--bad);margin-left:8px;flex-shrink:0;">¥${amt.toLocaleString()}</span></div>`;
+  };
+  const settledPoolRow = c => {
+    const amt = c.installType === 'installment' ? (c.installAmt || 0) : (c.amount || 0);
+    return `<div style="padding:6px 8px 6px 14px;border-top:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="goToCardAccordion('${c.cardId}')"><div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.memo || '（内容なし）'}</div><div style="font-size:10px;color:var(--text2);">${getCardName(c)} | ${c.date}</div></div><span style="font-size:13px;font-weight:700;color:var(--income);margin-left:8px;flex-shrink:0;">¥${amt.toLocaleString()}</span></div>`;
+  };
+  const settledConfRow = c => {
+    return `<div style="padding:6px 8px 6px 14px;border-top:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="goToCardAccordion('${c.cardId}')"><div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.memo || '（内容なし）'}</div><div style="font-size:10px;color:var(--text2);">${getCardName(c)}</div></div><span style="font-size:13px;font-weight:700;color:var(--income);margin-left:8px;flex-shrink:0;">¥${(c.total||0).toLocaleString()}</span></div>`;
+  };
+
   const cardUnpaidEl = document.getElementById('cardUnpaidSummary');
   if (cardUnpaidEl) {
+    const newAcc = unpaidNew.length > 0;
+    const carryAcc = unpaidCarry.length > 0;
+    const settledAcc = settledCount > 0;
     cardUnpaidEl.innerHTML = `
-      <div class="stat-row">
-        <span class="stat-label">① 今月 新規未払い <span style="background:var(--bad);color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;margin-left:4px;">${unpaidNew.length}件</span></span>
-        <span class="stat-value" style="color:var(--bad);">¥${unpaidNewAmt.toLocaleString()}</span>
+      <div>
+        <div class="stat-row" style="cursor:${newAcc ? 'pointer' : 'default'};" ${newAcc ? `onclick="toggleUnpaidDetail('unpaidDetail1')"` : ''}>
+          <span class="stat-label">① 今月 新規未払い <span style="background:var(--bad);color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;margin-left:4px;">${unpaidNew.length}件</span></span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="stat-value" style="color:var(--bad);">¥${unpaidNewAmt.toLocaleString()}</span>
+            ${newAcc ? '<span id="unpaidDetail1_arrow" style="font-size:11px;color:var(--text2);transition:transform 0.2s;">▼</span>' : ''}
+          </div>
+        </div>
+        <div id="unpaidDetail1" style="display:none;border-radius:6px;overflow:hidden;margin-bottom:4px;">${unpaidNew.map(unpaidItemRow).join('')}</div>
       </div>
-      <div class="stat-row">
-        <span class="stat-label">② 先月以前の繰越 <span style="background:var(--bad);color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;margin-left:4px;">${unpaidCarry.length}件</span></span>
-        <span class="stat-value" style="color:var(--bad);">¥${unpaidCarryAmt.toLocaleString()}</span>
+      <div>
+        <div class="stat-row" style="cursor:${carryAcc ? 'pointer' : 'default'};" ${carryAcc ? `onclick="toggleUnpaidDetail('unpaidDetail2')"` : ''}>
+          <span class="stat-label">② 先月以前の繰越 <span style="background:var(--bad);color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;margin-left:4px;">${unpaidCarry.length}件</span></span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="stat-value" style="color:var(--bad);">¥${unpaidCarryAmt.toLocaleString()}</span>
+            ${carryAcc ? '<span id="unpaidDetail2_arrow" style="font-size:11px;color:var(--text2);transition:transform 0.2s;">▼</span>' : ''}
+          </div>
+        </div>
+        <div id="unpaidDetail2" style="display:none;border-radius:6px;overflow:hidden;margin-bottom:4px;">${unpaidCarry.map(unpaidItemRow).join('')}</div>
       </div>
-      <div class="stat-row">
-        <span class="stat-label">③ 今月 清算済み <span style="background:var(--income);color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;margin-left:4px;">${settledCount}件</span></span>
-        <span class="stat-value" style="color:var(--income);">▲¥${settledTotal.toLocaleString()}</span>
+      <div>
+        <div class="stat-row" style="cursor:${settledAcc ? 'pointer' : 'default'};" ${settledAcc ? `onclick="toggleUnpaidDetail('unpaidDetail3')"` : ''}>
+          <span class="stat-label">③ 今月 清算済み <span style="background:var(--income);color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;margin-left:4px;">${settledCount}件</span></span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="stat-value" style="color:var(--income);">▲¥${settledTotal.toLocaleString()}</span>
+            ${settledAcc ? '<span id="unpaidDetail3_arrow" style="font-size:11px;color:var(--text2);transition:transform 0.2s;">▼</span>' : ''}
+          </div>
+        </div>
+        <div id="unpaidDetail3" style="display:none;border-radius:6px;overflow:hidden;margin-bottom:4px;">${[...settledFromPools.map(settledPoolRow), ...cardConfirmed.map(settledConfRow)].join('')}</div>
       </div>
       <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
       <div class="stat-row">
