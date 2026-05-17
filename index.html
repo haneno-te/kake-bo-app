@@ -3660,11 +3660,12 @@ function renderSettings() {
     const visible = settings.categories.filter(c => c.groupId === g.id && !c.hidden);
     const hidden = settings.categories.filter(c => c.groupId === g.id && c.hidden);
     const items = showHiddenCats ? [...visible, ...hidden] : visible;
-    const isOpen = localStorage.getItem(`catGroupOpen_${g.id}`) !== 'false';
+    const isOpen = localStorage.getItem(`catGroupOpen_${g.id}`) === 'true';
     catHtml += `<div class="group-accordion">
       <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'catGroupOpen_${g.id}')">
         <span>📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
         <div style="display:flex;align-items:center;gap:4px;">
+          <button class="btn-icon-edit" onclick="event.stopPropagation();openSettingEditModal('${g.id}','catGroup')">✏️</button>
           <button class="btn-icon-del" onclick="event.stopPropagation();deleteSettingItem('${g.id}','catGroup')">🗑️</button>
           <span class="group-arrow" style="font-size:11px;">${isOpen?'▲':'▼'}</span>
         </div>
@@ -3678,7 +3679,7 @@ function renderSettings() {
   const ungroupedHidden = settings.categories.filter(c => !c.groupId && c.hidden);
   const ungroupedCats = showHiddenCats ? [...ungroupedVisible, ...ungroupedHidden] : ungroupedVisible;
   if (ungroupedCats.length) {
-    const isOpen = localStorage.getItem('catGroupOpen_none') !== 'false';
+    const isOpen = localStorage.getItem('catGroupOpen_none') === 'true';
     catHtml += `<div class="group-accordion">
       <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'catGroupOpen_none')">
         <span>📁 カテゴリなし <span class="group-badge">${ungroupedVisible.length}</span></span>
@@ -3721,13 +3722,14 @@ function renderSettings() {
     const visible = settings.shops.filter(s => s.groupId === g.id && !s.hidden);
     const hidden = settings.shops.filter(s => s.groupId === g.id && s.hidden);
     const items = showHiddenShops ? [...visible, ...hidden] : visible;
-    const isOpen = localStorage.getItem(`shopGroupOpen_${g.id}`) !== 'false';
+    const isOpen = localStorage.getItem(`shopGroupOpen_${g.id}`) === 'true';
     shopHtml += `<div class="group-accordion">
       <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'shopGroupOpen_${g.id}')">
         <span>📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
         <div style="display:flex;align-items:center;gap:4px;">
+          <button class="btn-icon-edit" onclick="event.stopPropagation();openSettingEditModal('${g.id}','shopGroup')">✏️</button>
           <button class="btn-icon-del" onclick="event.stopPropagation();deleteSettingItem('${g.id}','shopGroup')">🗑️</button>
-          <span style="font-size:11px;">${isOpen?'▲':'▼'}</span>
+          <span class="group-arrow" style="font-size:11px;">${isOpen?'▲':'▼'}</span>
         </div>
       </div>
       <div style="display:${isOpen?'block':'none'};padding:2px 4px 4px;">
@@ -3739,7 +3741,7 @@ function renderSettings() {
   const ungroupedShopHidden = settings.shops.filter(s => !s.groupId && s.hidden);
   const ungroupedShops = showHiddenShops ? [...ungroupedShopVisible, ...ungroupedShopHidden] : ungroupedShopVisible;
   if (ungroupedShops.length) {
-    const isOpen = localStorage.getItem('shopGroupOpen_none') !== 'false';
+    const isOpen = localStorage.getItem('shopGroupOpen_none') === 'true';
     shopHtml += `<div class="group-accordion">
       <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'shopGroupOpen_none')">
         <span>📁 カテゴリなし <span class="group-badge">${ungroupedShopVisible.length}</span></span>
@@ -3935,7 +3937,8 @@ window.openSettingEditModal = (id, type) => {
   const map = {
     category: 'categories', shop: 'shops',
     badCategory: 'badCategories', incomeType: 'incomeTypes', card: 'cards',
-    breakdownTemplate: 'breakdownTemplates'
+    breakdownTemplate: 'breakdownTemplates',
+    catGroup: 'catGroups', shopGroup: 'shopGroups'
   };
   const item = settings[map[type]]?.find(x => x.id === id);
   if (!item) return;
@@ -3944,7 +3947,7 @@ window.openSettingEditModal = (id, type) => {
   document.getElementById('editSettingName').value = item.name;
   const groupRow = document.getElementById('editSettingGroupRow');
   const groupSel = document.getElementById('editSettingGroupSel');
-  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'breakdownTemplate'];
+  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'breakdownTemplate', 'catGroup', 'shopGroup'];
   if (noGroupTypes.includes(type)) {
     groupRow.style.display = 'none';
     groupSel.innerHTML = '';
@@ -3970,7 +3973,7 @@ window.openSettingEditModal = (id, type) => {
 window.saveSettingEdit = async () => {
   const name = document.getElementById('editSettingName').value.trim();
   if (!name || !editingSettingId) return;
-  const noGroupTypes = ['badCategory', 'incomeType', 'card'];
+  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'breakdownTemplate', 'catGroup', 'shopGroup'];
   const data = noGroupTypes.includes(editingSettingType)
     ? { name }
     : { name, groupId: document.getElementById('editSettingGroupSel').value || null };
