@@ -3075,7 +3075,7 @@ window.saveFixedPay = async () => {
     if (f.payAccountId) {
       await addDoc(collection(db, 'account_txs'), {
         accountId: f.payAccountId, txType: 'transfer_out',
-        amount, date, memo: f.name
+        amount, date, memo: f.name, fixedCostId: f.id
       });
     }
   } else if (f.payMethod === 'cash') {
@@ -3156,8 +3156,18 @@ window.saveFixed = async () => {
 };
 
 window.deleteFixed = (id) => {
-  showConfirm('この固定費を削除しますか？', async () => {
-    await deleteDoc(doc(db, 'fixed_costs', id));
+  showConfirm('この固定費を削除しますか？登録済みの当月以前の支払い記録もすべて削除されます。', async () => {
+    const [cpSnap, expSnap, txSnap] = await Promise.all([
+      getDocs(collection(db, 'card_pools')),
+      getDocs(collection(db, 'expenses')),
+      getDocs(collection(db, 'account_txs')),
+    ]);
+    const delPromises = [];
+    cpSnap.forEach(d => { if (d.data().fixedCostId === id) delPromises.push(deleteDoc(doc(db, 'card_pools', d.id))); });
+    expSnap.forEach(d => { if (d.data().fixedCostId === id) delPromises.push(deleteDoc(doc(db, 'expenses', d.id))); });
+    txSnap.forEach(d => { if (d.data().fixedCostId === id) delPromises.push(deleteDoc(doc(db, 'account_txs', d.id))); });
+    delPromises.push(deleteDoc(doc(db, 'fixed_costs', id)));
+    await Promise.all(delPromises);
     await loadMonthData();
   });
 };
@@ -3525,6 +3535,46 @@ window.saveExpense = async () => {
       );
       if (oldPool) await deleteDoc(doc(db, 'card_pools', oldPool.id));
     }
+
+    // 修正C: 編集時の口座振込同期
+    const oldAccountId = oldExp ? oldExp.accountId : null;
+    const newAccountId = data.accountId || null;
+    if (oldPayMethod === 'transfer' && newPayMethod === 'transfer') {
+      const oldTx = accountTxs.find(t =>
+        t.accountId === oldAccountId &&
+        t.date === (oldExp ? oldExp.date : '') &&
+        (t.amount || 0) === (oldExp ? oldExp.amount || 0 : 0) &&
+        t.txType === 'transfer_out'
+      );
+      if (oldAccountId === newAccountId) {
+        if (oldTx) {
+          await updateDoc(doc(db, 'account_txs', oldTx.id), {
+            amount, date, memo: memo || shop || '（支出タブから）'
+          });
+        }
+      } else {
+        if (oldTx) await deleteDoc(doc(db, 'account_txs', oldTx.id));
+        if (newAccountId) {
+          await addDoc(collection(db, 'account_txs'), {
+            accountId: newAccountId, txType: 'transfer_out',
+            amount, date, memo: memo || shop || '（支出タブから）'
+          });
+        }
+      }
+    } else if (oldPayMethod === 'transfer' && newPayMethod !== 'transfer') {
+      const oldTx = accountTxs.find(t =>
+        t.accountId === oldAccountId &&
+        t.date === (oldExp ? oldExp.date : '') &&
+        (t.amount || 0) === (oldExp ? oldExp.amount || 0 : 0) &&
+        t.txType === 'transfer_out'
+      );
+      if (oldTx) await deleteDoc(doc(db, 'account_txs', oldTx.id));
+    } else if (oldPayMethod !== 'transfer' && newPayMethod === 'transfer' && newAccountId) {
+      await addDoc(collection(db, 'account_txs'), {
+        accountId: newAccountId, txType: 'transfer_out',
+        amount, date, memo: memo || shop || '（支出タブから）'
+      });
+    }
   } else {
     await addDoc(collection(db, 'expenses'), data);
   }
@@ -3580,6 +3630,17 @@ window.deleteExpense = (id) => {
       );
       for (const p of linked) {
         await deleteDoc(doc(db, 'card_pools', p.id));
+      }
+    }
+    if (expense && expense.payMethod === 'transfer' && expense.accountId) {
+      const linked = accountTxs.filter(t =>
+        t.accountId === expense.accountId &&
+        t.date === expense.date &&
+        (t.amount||0) === (expense.amount||0) &&
+        t.txType === 'transfer_out'
+      );
+      for (const t of linked) {
+        await deleteDoc(doc(db, 'account_txs', t.id));
       }
     }
     await loadMonthData();
