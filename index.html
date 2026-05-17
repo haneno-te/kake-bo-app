@@ -822,6 +822,11 @@
     <div id="catBreakdown"></div>
   </div>
 
+  <div class="card" id="breakdownSummaryCard">
+    <div class="card-title">内訳別集計</div>
+    <div id="breakdownSummary"></div>
+  </div>
+
   <div class="card" id="badSummaryCard">
     <div class="card-title">👿 無駄遣い集計</div>
     <div style="background:var(--bad-bg);border:1px solid var(--bad);border-radius:10px;padding:14px;margin-bottom:10px;">
@@ -3181,6 +3186,30 @@ function renderSummary() {
           <span class="stat-value" style="color:var(--expense);">¥${total.toLocaleString()}</span>
         </div>`).join('')
       : '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">支出データなし</div>';
+  }
+
+  // 内訳別集計
+  const bdMap = {};
+  expenses.forEach(e => {
+    (e.breakdowns || []).forEach(b => {
+      const key = b.name || '（名前なし）';
+      if (!bdMap[key]) bdMap[key] = { total: 0, count: 0, isBad: false };
+      bdMap[key].total += b.amount || 0;
+      bdMap[key].count++;
+      if (b.isBad) bdMap[key].isBad = true;
+    });
+  });
+  const bdEl = document.getElementById('breakdownSummary');
+  if (bdEl) {
+    const sorted = Object.entries(bdMap).sort((a, b) => b[1].total - a[1].total);
+    bdEl.innerHTML = sorted.length > 0
+      ? sorted.map(([name, v]) => `<div class="stat-row">
+          <span class="stat-label">${v.isBad ? '👿 ' : ''}${name}（${v.count}件）</span>
+          <span class="stat-value" style="color:${v.isBad ? 'var(--bad)' : 'var(--expense)'};">
+            ¥${v.total.toLocaleString()}
+          </span>
+        </div>`).join('')
+      : '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">内訳データなし</div>';
   }
 }
 
