@@ -1011,6 +1011,15 @@
       </div>
       <button class="btn-primary" onclick="runHealthCheck()">🔍 診断を実行</button>
       <div id="healthCheckResult" style="margin-top:14px;"></div>
+      <div id="healthDeleteWrap" style="margin-top:14px;display:none;">
+        <button class="btn-primary" style="background:var(--expense);"
+                onclick="deleteHealthCheckIssues()">
+          🗑️ 検出された <span id="healthDeleteCount">0</span>件 を一括削除
+        </button>
+        <div style="font-size:11px;color:var(--text2);margin-top:6px;text-align:center;">
+          ※ account_txs の孤立は対象外（手動で確認してください）
+        </div>
+      </div>
     </div>
   </div>
 
@@ -4098,6 +4107,8 @@ window.saveDeleteConfirmDefault = (val) => {
   localStorage.setItem('deleteConfirmDefault', val);
 };
 
+let _healthCheckIssues = [];
+
 window.runHealthCheck = async () => {
   const resultEl = document.getElementById('healthCheckResult');
   resultEl.innerHTML = '<div style="color:var(--text2);font-size:13px;">診断中...</div>';
@@ -4252,6 +4263,43 @@ window.runHealthCheck = async () => {
   ]);
 
   resultEl.innerHTML = summary + detail1 + detail2 + detail3 + detail4 + detail5;
+
+  // 削除対象を集約（④ account_txs は除外）
+  _healthCheckIssues = [
+    ...orphanPools.map(r => ({ col: 'card_pools', id: r.id, reason: '①孤立: ' + r.reason })),
+    ...orphanConfirmed.map(r => ({ col: 'card_confirmed', id: r.id, reason: '②孤立: ' + r.reason })),
+    ...mismatchPools.map(r => ({ col: 'card_pools', id: r.id, reason: '③乖離: ' + r.reason })),
+    ...orphanExpCard.map(r => ({ col: 'expenses', id: r.id, reason: '⑤孤立: ' + r.reason })),
+  ];
+  const deleteCount = _healthCheckIssues.length;
+  const wrap = document.getElementById('healthDeleteWrap');
+  const countEl = document.getElementById('healthDeleteCount');
+  if (wrap) wrap.style.display = deleteCount > 0 ? 'block' : 'none';
+  if (countEl) countEl.textContent = deleteCount;
+};
+
+window.deleteHealthCheckIssues = () => {
+  const targets = _healthCheckIssues.filter(i => i.col !== 'account_txs');
+  if (targets.length === 0) return;
+  showConfirm(
+    `${targets.length}件のデータを削除します。\nこの操作は取り消せません。\n本当に削除しますか？`,
+    async () => {
+      let okCount = 0, errCount = 0;
+      for (const item of targets) {
+        try {
+          await deleteDoc(doc(db, item.col, item.id));
+          okCount++;
+        } catch(e) {
+          console.error('削除失敗:', item, e);
+          errCount++;
+        }
+      }
+      showToast(`削除完了：${okCount}件成功、${errCount}件失敗`);
+      await loadMonthData();
+      runHealthCheck();
+    },
+    '削除する'
+  );
 };
 
 window.moveSettingItem = async (type, i, delta) => {
