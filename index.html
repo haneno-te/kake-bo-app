@@ -1531,7 +1531,7 @@
     </div>
     <div class="form-row">
       <label class="form-label">支払い日（任意）</label>
-      <input type="number" class="form-input" id="fix-payDay" placeholder="1〜31" inputmode="numeric" min="1" max="31">
+      <input type="text" class="form-input" id="fix-payDay" placeholder="1〜31" inputmode="numeric">
     </div>
     <div class="form-row">
       <label class="form-label">支払い方法（任意）</label>
@@ -1576,7 +1576,7 @@
     </div>
     <div class="form-row" id="editSettingBillingDayRow" style="display:none;">
       <label class="form-label">引き落とし日（日）</label>
-      <input type="number" class="form-input" id="editSettingBillingDay" placeholder="例：10" min="1" max="31" inputmode="numeric">
+      <input type="text" class="form-input" id="editSettingBillingDay" placeholder="例：10" inputmode="numeric">
     </div>
     <button class="btn-primary" onclick="saveSettingEdit()">保存</button>
     <button class="btn-secondary" id="editSettingCancelBtn" onclick="closeModal('settingEditModal')">キャンセル</button>
@@ -4463,8 +4463,28 @@ window.drillDownExpFilter = (filter) => {
 };
 
 // ===== モーダル共通 =====
-function openModal(id) { document.getElementById(id).classList.add('open'); }
-window.closeModal = (id) => { document.getElementById(id).classList.remove('open'); };
+function openModal(id) {
+  document.querySelectorAll('.modal-overlay.open').forEach(el => {
+    if (el.id !== id) el.classList.remove('open');
+  });
+  document.getElementById(id).classList.add('open');
+}
+window.closeModal = (id) => {
+  document.getElementById(id).classList.remove('open');
+  const resetMap = {
+    'expenseModal':    () => { editingExpenseId = null; },
+    'incomeModal':     () => { editingIncomeId = null; },
+    'fixedModal':      () => { editingFixedId = null; },
+    'cardPoolModal':   () => { editingCardPoolId = null; },
+    'cardFixedModal':  () => { editingCardFixedId = null; editingCardFixedFromPool = false; },
+    'accountTxModal':  () => { editingAccountTxId = null; },
+    'settingEditModal':() => { editingSettingId = null; editingSettingType = null; },
+    'cardConfirmModal':() => { cardConfirmTargetId = null; },
+    'adjustModal':     () => { adjustAccountId = null; },
+    'initBalModal':    () => { _initBalAccountId = null; },
+  };
+  if (resetMap[id]) resetMap[id]();
+};
 
 // ===== 確認ダイアログ =====
 function showConfirm(msg, cb, okLabel = '削除') {
