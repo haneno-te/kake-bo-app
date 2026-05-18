@@ -1478,6 +1478,16 @@
       <label class="form-label">引き落とし日（日）</label>
       <input type="text" class="form-input" id="editSettingBillingDay" placeholder="例：10" inputmode="numeric">
     </div>
+    <div class="form-row" id="editSettingDebitRow" style="display:none;">
+      <label class="form-label" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="editSettingIsDebit" onchange="onDebitCheckChange()">
+        デビット機能あり
+      </label>
+    </div>
+    <div class="form-row" id="editSettingDebitAccountRow" style="display:none;">
+      <label class="form-label">引き落とし口座</label>
+      <select class="form-select" id="editSettingDebitAccountId"></select>
+    </div>
     <button class="btn-primary" onclick="saveSettingEdit()">保存</button>
     <button class="btn-secondary" id="editSettingCancelBtn" onclick="closeModal('settingEditModal')">キャンセル</button>
   </div>
@@ -2153,12 +2163,17 @@ function renderDayPanel(dateStr) {
     const label = isFuture
       ? '<div style="font-size:10px;color:var(--expense);font-weight:700;margin-bottom:4px;">📌 支払い予定</div>'
       : '';
+    const cardCard = f.payMethod === 'card' ? (() => {
+      const cardName = settings.cards.find(c => c.id === f.payCardId)?.name || 'カード';
+      return `<div style="font-size:11px;color:var(--card-color);margin-top:4px;cursor:pointer;" onclick="goToCardAccordion('${f.payCardId}')">💳 ${cardName}の引き落としに含まれる</div>`;
+    })() : '';
     html += `<div class="record-item" style="border-color:var(--expense);">
       ${label}
       <div class="record-top">
         <div class="record-left">
           <div class="record-category">固定費</div>
           <div class="record-memo">${f.name}</div>
+          ${cardCard}
         </div>
         <div class="record-right">
           <div class="record-amount">¥${amount.toLocaleString()}</div>
@@ -2783,7 +2798,10 @@ function renderFixedTab() {
     }
     const registerCell = f.payMethod
       ? (isRegistered
-          ? `<span style="font-size:10px;color:var(--income);background:rgba(78,205,196,0.15);border-radius:6px;padding:3px 7px;flex-shrink:0;">✅ 登録済み</span>`
+          ? `<label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--income);flex-shrink:0;cursor:pointer;">
+               <input type="checkbox" checked style="accent-color:var(--income);width:14px;height:14px;" onchange="unregisterFixed('${f.id}',this)">
+               登録済み
+             </label>`
           : `<button class="btn-sm accent" onclick="openFixedPayModal('${f.id}')" style="flex-shrink:0;">📥 今月分を登録</button>`)
       : '';
 
@@ -2805,6 +2823,36 @@ function renderFixedTab() {
   }).join('');
   document.getElementById('fixedMonthTotal').textContent = '¥' + total.toLocaleString();
 }
+
+window.unregisterFixed = (id, checkbox) => {
+  checkbox.checked = true; // 確認が完了するまでチェック状態を維持
+  showConfirm('今月分の登録を取り消しますか？子データも削除されます。', async () => {
+    const ym = currentYM();
+    const [cpSnap, expSnap, txSnap] = await Promise.all([
+      getDocs(collection(db, 'card_pools')),
+      getDocs(collection(db, 'expenses')),
+      getDocs(collection(db, 'account_txs')),
+    ]);
+    const batch = writeBatch(db);
+    cpSnap.forEach(d => {
+      const r = d.data();
+      if (r.fixedCostId !== id || r.confirmedMonth) return;
+      if ((r.month === ym) || (!r.month && r.date && r.date.startsWith(ym))) batch.delete(doc(db, 'card_pools', d.id));
+    });
+    expSnap.forEach(d => {
+      const r = d.data();
+      if (r.fixedCostId !== id) return;
+      if (r.date && r.date.startsWith(ym)) batch.delete(doc(db, 'expenses', d.id));
+    });
+    txSnap.forEach(d => {
+      const r = d.data();
+      if (r.fixedCostId !== id) return;
+      if (r.date && r.date.startsWith(ym)) batch.delete(doc(db, 'account_txs', d.id));
+    });
+    await batch.commit();
+    await loadMonthData();
+  }, '取り消す');
+};
 
 window.openFixedPayModal = (id) => {
   const f = fixedCosts.find(x => x.id === id);
@@ -3365,95 +3413,103 @@ window.saveExpense = async () => {
   if (currentPayMethod === 'card') data.cardId = document.getElementById('exp-cardId').value;
   if (currentPayMethod === 'transfer') data.accountId = document.getElementById('exp-accountId').value;
 
+  const _expMemo = memo || shop || '（支出タブから）';
+  const _debitMemo = memo || shop || '（デビット決済）';
+
   if (editingExpenseId) {
     await updateDoc(doc(db, 'expenses', editingExpenseId), data);
 
-    // 修正A: 編集時のカードプール同期
     const oldExp = expenses.find(x => x.id === editingExpenseId);
-    const oldPayMethod = oldExp ? oldExp.payMethod : null;
-    const oldCardId = oldExp ? oldExp.cardId : null;
+    const oldPayMethod = oldExp?.payMethod;
+    const oldCardId = oldExp?.cardId;
     const newPayMethod = currentPayMethod;
     const newCardId = data.cardId || null;
+
+    const oldCard = oldCardId ? settings.cards.find(c => c.id === oldCardId) : null;
+    const newCard = newCardId ? settings.cards.find(c => c.id === newCardId) : null;
+    const oldIsDebit = oldPayMethod === 'card' && !!oldCard?.isDebit && !!oldCard?.debitAccountId;
+    const newIsDebit = newPayMethod === 'card' && !!newCard?.isDebit && !!newCard?.debitAccountId;
+
+    // カード連動
     if (oldPayMethod === 'card' && newPayMethod === 'card') {
-      const oldPool = cardPools.find(p =>
-        p.cardId === oldCardId &&
-        p.date === (oldExp ? oldExp.date : '') &&
-        (p.amount || 0) === (oldExp ? oldExp.amount || 0 : 0) &&
-        !p.confirmedMonth
-      );
-      if (oldCardId === newCardId) {
-        if (oldPool) {
-          await updateDoc(doc(db, 'card_pools', oldPool.id), {
-            amount, memo: memo || shop || '（支出タブから）'
-          });
+      if (oldIsDebit && newIsDebit) {
+        const oldTx = accountTxs.find(t => t.debitExpenseId === editingExpenseId);
+        if (oldCardId === newCardId) {
+          if (oldTx) await updateDoc(doc(db, 'account_txs', oldTx.id), { amount, date, memo: _debitMemo, accountId: newCard.debitAccountId });
+        } else {
+          if (oldTx) await deleteDoc(doc(db, 'account_txs', oldTx.id));
+          await addDoc(collection(db, 'account_txs'), { accountId: newCard.debitAccountId, txType: 'transfer_out', amount, date, memo: _debitMemo, debitExpenseId: editingExpenseId });
         }
-      } else {
+      } else if (oldIsDebit && !newIsDebit) {
+        const oldTx = accountTxs.find(t => t.debitExpenseId === editingExpenseId);
+        if (oldTx) await deleteDoc(doc(db, 'account_txs', oldTx.id));
+        if (newCardId) await addDoc(collection(db, 'card_pools'), { amount, date, cardId: newCardId, memo: _expMemo, installType: 'once' });
+      } else if (!oldIsDebit && newIsDebit) {
+        const oldPool = cardPools.find(p => p.cardId === oldCardId && p.date === oldExp?.date && (p.amount||0) === (oldExp?.amount||0) && !p.confirmedMonth);
         if (oldPool) await deleteDoc(doc(db, 'card_pools', oldPool.id));
-        if (newCardId) {
-          await addDoc(collection(db, 'card_pools'), {
-            amount, date, cardId: newCardId,
-            memo: memo || shop || '（支出タブから）',
-            installType: 'once'
-          });
+        await addDoc(collection(db, 'account_txs'), { accountId: newCard.debitAccountId, txType: 'transfer_out', amount, date, memo: _debitMemo, debitExpenseId: editingExpenseId });
+      } else {
+        // 両方通常カード
+        const oldPool = cardPools.find(p => p.cardId === oldCardId && p.date === oldExp?.date && (p.amount||0) === (oldExp?.amount||0) && !p.confirmedMonth);
+        if (oldCardId === newCardId) {
+          if (oldPool) await updateDoc(doc(db, 'card_pools', oldPool.id), { amount, memo: _expMemo });
+        } else {
+          if (oldPool) await deleteDoc(doc(db, 'card_pools', oldPool.id));
+          if (newCardId) await addDoc(collection(db, 'card_pools'), { amount, date, cardId: newCardId, memo: _expMemo, installType: 'once' });
         }
       }
     } else if (oldPayMethod !== 'card' && newPayMethod === 'card' && newCardId) {
-      await addDoc(collection(db, 'card_pools'), {
-        amount, date, cardId: newCardId,
-        memo: memo || shop || '（支出タブから）',
-        installType: 'once'
-      });
+      if (newIsDebit) {
+        await addDoc(collection(db, 'account_txs'), { accountId: newCard.debitAccountId, txType: 'transfer_out', amount, date, memo: _debitMemo, debitExpenseId: editingExpenseId });
+      } else {
+        await addDoc(collection(db, 'card_pools'), { amount, date, cardId: newCardId, memo: _expMemo, installType: 'once' });
+      }
     } else if (oldPayMethod === 'card' && newPayMethod !== 'card') {
-      const oldPool = cardPools.find(p =>
-        p.cardId === oldCardId &&
-        p.date === (oldExp ? oldExp.date : '') &&
-        (p.amount || 0) === (oldExp ? oldExp.amount || 0 : 0) &&
-        !p.confirmedMonth
-      );
-      if (oldPool) await deleteDoc(doc(db, 'card_pools', oldPool.id));
+      if (oldIsDebit) {
+        const oldTx = accountTxs.find(t => t.debitExpenseId === editingExpenseId);
+        if (oldTx) await deleteDoc(doc(db, 'account_txs', oldTx.id));
+      } else {
+        const oldPool = cardPools.find(p => p.cardId === oldCardId && p.date === oldExp?.date && (p.amount||0) === (oldExp?.amount||0) && !p.confirmedMonth);
+        if (oldPool) await deleteDoc(doc(db, 'card_pools', oldPool.id));
+      }
     }
 
-    // 修正C: 編集時の口座振込同期
-    const oldAccountId = oldExp ? oldExp.accountId : null;
+    // 口座振込連動
+    const oldAccountId = oldExp?.accountId;
     const newAccountId = data.accountId || null;
     if (oldPayMethod === 'transfer' && newPayMethod === 'transfer') {
-      const oldTx = accountTxs.find(t =>
-        t.accountId === oldAccountId &&
-        t.date === (oldExp ? oldExp.date : '') &&
-        (t.amount || 0) === (oldExp ? oldExp.amount || 0 : 0) &&
-        t.txType === 'transfer_out'
-      );
+      const oldTx = accountTxs.find(t => t.accountId === oldAccountId && t.date === oldExp?.date && (t.amount||0) === (oldExp?.amount||0) && t.txType === 'transfer_out');
       if (oldAccountId === newAccountId) {
-        if (oldTx) {
-          await updateDoc(doc(db, 'account_txs', oldTx.id), {
-            amount, date, memo: memo || shop || '（支出タブから）'
-          });
-        }
+        if (oldTx) await updateDoc(doc(db, 'account_txs', oldTx.id), { amount, date, memo: _expMemo });
       } else {
         if (oldTx) await deleteDoc(doc(db, 'account_txs', oldTx.id));
-        if (newAccountId) {
-          await addDoc(collection(db, 'account_txs'), {
-            accountId: newAccountId, txType: 'transfer_out',
-            amount, date, memo: memo || shop || '（支出タブから）'
-          });
-        }
+        if (newAccountId) await addDoc(collection(db, 'account_txs'), { accountId: newAccountId, txType: 'transfer_out', amount, date, memo: _expMemo });
       }
     } else if (oldPayMethod === 'transfer' && newPayMethod !== 'transfer') {
-      const oldTx = accountTxs.find(t =>
-        t.accountId === oldAccountId &&
-        t.date === (oldExp ? oldExp.date : '') &&
-        (t.amount || 0) === (oldExp ? oldExp.amount || 0 : 0) &&
-        t.txType === 'transfer_out'
-      );
+      const oldTx = accountTxs.find(t => t.accountId === oldAccountId && t.date === oldExp?.date && (t.amount||0) === (oldExp?.amount||0) && t.txType === 'transfer_out');
       if (oldTx) await deleteDoc(doc(db, 'account_txs', oldTx.id));
     } else if (oldPayMethod !== 'transfer' && newPayMethod === 'transfer' && newAccountId) {
-      await addDoc(collection(db, 'account_txs'), {
-        accountId: newAccountId, txType: 'transfer_out',
-        amount, date, memo: memo || shop || '（支出タブから）'
-      });
+      await addDoc(collection(db, 'account_txs'), { accountId: newAccountId, txType: 'transfer_out', amount, date, memo: _expMemo });
     }
   } else {
-    await addDoc(collection(db, 'expenses'), data);
+    const expDocRef = await addDoc(collection(db, 'expenses'), data);
+    const expId = expDocRef.id;
+
+    // カード払いの場合（新規のみ）
+    if (currentPayMethod === 'card' && data.cardId) {
+      const card = settings.cards.find(c => c.id === data.cardId);
+      if (card?.isDebit && card?.debitAccountId) {
+        await addDoc(collection(db, 'account_txs'), { accountId: card.debitAccountId, txType: 'transfer_out', amount, date, memo: _debitMemo, debitExpenseId: expId });
+      } else {
+        await addDoc(collection(db, 'card_pools'), { amount, date, cardId: data.cardId, memo: _expMemo, installType: 'once' });
+        showToast('カードプールにも追加しました');
+      }
+    }
+
+    // 口座振込の場合（新規のみ）
+    if (currentPayMethod === 'transfer' && data.accountId) {
+      await addDoc(collection(db, 'account_txs'), { accountId: data.accountId, txType: 'transfer_out', amount, date, memo: _expMemo });
+    }
   }
 
   // テンプレ登録
@@ -3469,27 +3525,6 @@ window.saveExpense = async () => {
     shopCheck.checked = false;
   }
 
-  // カード払いの場合、自動でプールに追加（新規のみ）
-  if (currentPayMethod === 'card' && data.cardId && !editingExpenseId) {
-    await addDoc(collection(db, 'card_pools'), {
-      amount, date, cardId: data.cardId,
-      memo: memo || shop || '（支出タブから）',
-      installType: 'once'
-    });
-    showToast('カードプールにも追加しました');
-  }
-
-  // 修正B: 口座振込の場合、account_txs に自動反映（新規のみ）
-  if (currentPayMethod === 'transfer' && data.accountId && !editingExpenseId) {
-    await addDoc(collection(db, 'account_txs'), {
-      accountId: data.accountId,
-      txType: 'transfer_out',
-      amount,
-      date,
-      memo: memo || shop || '（支出タブから）'
-    });
-  }
-
   closeModal('expenseModal');
   await loadMonthData();
 };
@@ -3499,14 +3534,18 @@ window.deleteExpense = (id) => {
     const expense = expenses.find(x => x.id === id);
     await deleteDoc(doc(db, 'expenses', id));
     if (expense && expense.payMethod === 'card' && expense.cardId) {
-      const linked = cardPools.filter(p =>
-        p.cardId === expense.cardId &&
-        p.date === expense.date &&
-        (p.amount||0) === (expense.amount||0) &&
-        !p.confirmedMonth
-      );
-      for (const p of linked) {
-        await deleteDoc(doc(db, 'card_pools', p.id));
+      const card = settings.cards.find(c => c.id === expense.cardId);
+      if (card?.isDebit) {
+        const linked = accountTxs.filter(t => t.debitExpenseId === id);
+        for (const t of linked) await deleteDoc(doc(db, 'account_txs', t.id));
+      } else {
+        const linked = cardPools.filter(p =>
+          p.cardId === expense.cardId &&
+          p.date === expense.date &&
+          (p.amount||0) === (expense.amount||0) &&
+          !p.confirmedMonth
+        );
+        for (const p of linked) await deleteDoc(doc(db, 'card_pools', p.id));
       }
     }
     if (expense && expense.payMethod === 'transfer' && expense.accountId) {
@@ -3972,7 +4011,7 @@ function renderSettings() {
         <button class="btn-order" onclick="moveSettingItem('card',${i},-1)">▲</button>
         <button class="btn-order" onclick="moveSettingItem('card',${i},1)">▼</button>
       </div>
-      <div class="setting-item-name">${item.name}${item.billingDay ? ` <span style="font-size:10px;color:var(--accent);">${item.billingDay}日</span>` : ''}</div>
+      <div class="setting-item-name">${item.name}${item.billingDay ? ` <span style="font-size:10px;color:var(--accent);">${item.billingDay}日</span>` : ''}${item.isDebit ? ' <span style="font-size:10px;color:var(--card-color);background:rgba(167,139,250,0.15);border-radius:4px;padding:1px 5px;">💳デビット</span>' : ''}</div>
       <button class="btn-icon-edit" onclick="openSettingEditModal('${item.id}','card')">✏️</button>
       <button class="btn-icon-del" onclick="deleteSettingItem('${item.id}','card')">🗑️</button>
     </div>
@@ -4207,14 +4246,29 @@ window.openSettingEditModal = (id, type) => {
     });
   }
   const billingDayRow = document.getElementById('editSettingBillingDayRow');
+  const debitRow = document.getElementById('editSettingDebitRow');
+  const debitAccountRow = document.getElementById('editSettingDebitAccountRow');
   if (type === 'card') {
     billingDayRow.style.display = '';
     document.getElementById('editSettingBillingDay').value = item.billingDay || '';
+    debitRow.style.display = '';
+    const isDebit = !!item.isDebit;
+    document.getElementById('editSettingIsDebit').checked = isDebit;
+    const debitSel = document.getElementById('editSettingDebitAccountId');
+    debitSel.innerHTML = settings.accounts.map(a => `<option value="${a.id}"${item.debitAccountId === a.id ? ' selected' : ''}>${a.name}</option>`).join('');
+    debitAccountRow.style.display = isDebit ? '' : 'none';
   } else {
     billingDayRow.style.display = 'none';
+    debitRow.style.display = 'none';
+    debitAccountRow.style.display = 'none';
   }
   openModal('settingEditModal');
   setTimeout(() => document.getElementById('editSettingCancelBtn').focus(), 50);
+};
+
+window.onDebitCheckChange = () => {
+  const checked = document.getElementById('editSettingIsDebit').checked;
+  document.getElementById('editSettingDebitAccountRow').style.display = checked ? '' : 'none';
 };
 
 window.saveSettingEdit = async () => {
@@ -4226,6 +4280,9 @@ window.saveSettingEdit = async () => {
     : { name, groupId: document.getElementById('editSettingGroupSel').value || null };
   if (editingSettingType === 'card') {
     data.billingDay = parseInt(document.getElementById('editSettingBillingDay').value) || null;
+    const isDebit = document.getElementById('editSettingIsDebit').checked;
+    data.isDebit = isDebit;
+    data.debitAccountId = isDebit ? (document.getElementById('editSettingDebitAccountId').value || null) : null;
   }
   await updateDoc(doc(db, 'kakeibo_settings', editingSettingId), data);
   closeModal('settingEditModal');
@@ -4336,10 +4393,12 @@ window.runHealthCheck = async () => {
     }
   });
 
-  // ⑤ 孤立 expenses（カード払い）
+  // ⑤ 孤立 expenses（カード払い）※デビットカードは除外
   const orphanExpCard = [];
   expArr.forEach(e => {
     if (e.payMethod !== 'card') return;
+    const card = settings.cards.find(c => c.id === e.cardId);
+    if (card?.isDebit) return; // デビットは card_pools を使わない
     const linked = [...cpMap.values()].find(cp =>
       cp.date === e.date &&
       (cp.amount || 0) === (e.amount || 0) &&
@@ -4347,6 +4406,27 @@ window.runHealthCheck = async () => {
     );
     if (!linked) {
       orphanExpCard.push({ ...e, reason: '対応する card_pools が存在しない' });
+    }
+  });
+
+  // ⑥ デビット支出：対応する口座記録なし
+  const orphanDebitExp = [];
+  expArr.forEach(e => {
+    if (e.payMethod !== 'card') return;
+    const card = settings.cards.find(c => c.id === e.cardId);
+    if (!card?.isDebit) return;
+    const linked = txArr.find(t => t.debitExpenseId === e.id);
+    if (!linked) {
+      orphanDebitExp.push({ ...e, reason: 'デビット支出だが対応する口座記録（debitExpenseId）がありません' });
+    }
+  });
+
+  // ⑦ 口座記録（debitExpenseId）：元の支出なし
+  const orphanDebitTxs = [];
+  txArr.forEach(tx => {
+    if (!tx.debitExpenseId) return;
+    if (!expMap.has(tx.debitExpenseId)) {
+      orphanDebitTxs.push({ ...tx, reason: `debitExpenseId="${tx.debitExpenseId}" が expenses に存在しない` });
     }
   });
 
@@ -4365,7 +4445,7 @@ window.runHealthCheck = async () => {
     return `<div class="card" style="margin-top:10px;"><div class="card-title">${label} 詳細</div>${rows}</div>`;
   };
 
-  const total = orphanPools.length + orphanConfirmed.length + mismatchPools.length + orphanTxs.length + orphanExpCard.length;
+  const total = orphanPools.length + orphanConfirmed.length + mismatchPools.length + orphanTxs.length + orphanExpCard.length + orphanDebitExp.length + orphanDebitTxs.length;
   const summaryColor = total === 0 ? 'var(--good,#4caf50)' : 'var(--bad)';
   const summaryText = total === 0 ? '✅ データは健全です' : `⚠️ ${total}件の確認すべきデータがあります`;
 
@@ -4383,6 +4463,8 @@ window.runHealthCheck = async () => {
       ${statRow('③ 未払いプール：固定費と金額が不一致', mismatchPools.length, '固定費の金額が変更されたが、未払いプール側に反映されていません')}
       ${statRow('④ 口座記録：元データなし', orphanTxs.length, '対応する収入・支出・固定費が見つかりません')}
       ${statRow('⑤ カード支出：未払いプールなし', orphanExpCard.length, 'カード払いの支出だが、未払いプール記録が見当たりません')}
+      ${statRow('⑥ デビット支出：口座記録なし', orphanDebitExp.length, 'デビットカード支出に対応する口座引き落とし記録がありません')}
+      ${statRow('⑦ 口座記録：元のデビット支出なし', orphanDebitTxs.length, 'debitExpenseIdが付いた口座記録だが、元の支出が見つかりません')}
     </div>`;
 
   const detail1 = makeDetail('① 未払いプール：元データなし', 'card_pools', orphanPools, [
@@ -4400,8 +4482,14 @@ window.runHealthCheck = async () => {
   const detail5 = makeDetail('⑤ カード支出：未払いプールなし', 'expenses', orphanExpCard, [
     { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
   ]);
+  const detail6 = makeDetail('⑥ デビット支出：口座記録なし', 'expenses', orphanDebitExp, [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
+  ]);
+  const detail7 = makeDetail('⑦ 口座記録：元のデビット支出なし', 'account_txs', orphanDebitTxs, [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }
+  ]);
 
-  resultEl.innerHTML = summary + detail1 + detail2 + detail3 + detail4 + detail5;
+  resultEl.innerHTML = summary + detail1 + detail2 + detail3 + detail4 + detail5 + detail6 + detail7;
 
   // 削除対象を集約（④ account_txs は除外）
   _healthCheckIssues = [
