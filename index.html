@@ -1000,6 +1000,20 @@
     </div>
   </div>
 
+  <div class="accordion-section">
+    <div class="accordion-header" onclick="toggleAccordion(this)">
+      <span>🔍 データ健康診断</span><span class="accordion-arrow">▼</span>
+    </div>
+    <div class="accordion-body" style="display:none;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+        孤立データ・乖離データを検出します。削除は行いません。<br>
+        結果はこのボタンの下に表示されます。
+      </div>
+      <button class="btn-primary" onclick="runHealthCheck()">🔍 診断を実行</button>
+      <div id="healthCheckResult" style="margin-top:14px;"></div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ===== モーダル群 ===== -->
@@ -4082,6 +4096,162 @@ window.toggleAccountExclude = async (id, excludeFromTotal) => {
 // 削除デフォルト設定
 window.saveDeleteConfirmDefault = (val) => {
   localStorage.setItem('deleteConfirmDefault', val);
+};
+
+window.runHealthCheck = async () => {
+  const resultEl = document.getElementById('healthCheckResult');
+  resultEl.innerHTML = '<div style="color:var(--text2);font-size:13px;">診断中...</div>';
+
+  const [expSnap, incSnap, fcSnap, cpSnap, ccSnap, txSnap] = await Promise.all([
+    getDocs(collection(db, 'expenses')),
+    getDocs(collection(db, 'income')),
+    getDocs(collection(db, 'fixed_costs')),
+    getDocs(collection(db, 'card_pools')),
+    getDocs(collection(db, 'card_confirmed')),
+    getDocs(collection(db, 'account_txs')),
+  ]);
+
+  const expMap = new Map();
+  expSnap.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
+  const incMap = new Map();
+  incSnap.forEach(d => incMap.set(d.id, { id: d.id, ...d.data() }));
+  const fcMap = new Map();
+  fcSnap.forEach(d => fcMap.set(d.id, { id: d.id, ...d.data() }));
+  const cpMap = new Map();
+  cpSnap.forEach(d => cpMap.set(d.id, { id: d.id, ...d.data() }));
+  const ccMap = new Map();
+  ccSnap.forEach(d => ccMap.set(d.id, { id: d.id, ...d.data() }));
+
+  const expArr = [...expMap.values()];
+  const txArr = [];
+  txSnap.forEach(d => txArr.push({ id: d.id, ...d.data() }));
+
+  // ① 孤立 card_pools
+  const orphanPools = [];
+  cpMap.forEach(cp => {
+    if (cp.fixedCostId) {
+      if (!fcMap.has(cp.fixedCostId)) {
+        orphanPools.push({ ...cp, reason: `fixedCostId="${cp.fixedCostId}" が fixed_costs に存在しない` });
+      }
+    } else {
+      const linked = expArr.find(e =>
+        e.date === cp.date &&
+        (e.amount || 0) === (cp.amount || 0) &&
+        e.cardId === cp.cardId &&
+        e.payMethod === 'card'
+      );
+      if (!linked) {
+        orphanPools.push({ ...cp, reason: '対応する expenses なし、fixedCostId なし' });
+      }
+    }
+  });
+
+  // ② 孤立 card_confirmed
+  const orphanConfirmed = [];
+  ccMap.forEach(cc => {
+    if (!cc.poolId || !cpMap.has(cc.poolId)) {
+      orphanConfirmed.push({ ...cc, reason: cc.poolId ? `poolId="${cc.poolId}" が card_pools に存在しない` : 'poolId なし' });
+    }
+  });
+
+  // ③ 乖離 card_pools
+  const mismatchPools = [];
+  cpMap.forEach(cp => {
+    if (!cp.fixedCostId) return;
+    const fc = fcMap.get(cp.fixedCostId);
+    if (!fc) return;
+    const fcAmt = fc.actualAmount ?? fc.amount ?? 0;
+    const cpAmt = cp.amount ?? 0;
+    if (fcAmt !== cpAmt) {
+      mismatchPools.push({ ...cp, reason: `fixed_costs.amount=${fcAmt} vs card_pools.amount=${cpAmt}` });
+    }
+  });
+
+  // ④ 孤立 account_txs
+  const orphanTxs = [];
+  txArr.forEach(tx => {
+    const memo = tx.memo || '';
+    if (memo.startsWith('収入：')) {
+      if (!tx.incomeId || !incMap.has(tx.incomeId)) {
+        orphanTxs.push({ ...tx, reason: tx.incomeId ? `incomeId="${tx.incomeId}" が income に存在しない` : 'incomeId なし（収入連動）' });
+      }
+    } else if (tx.fixedCostId) {
+      if (!fcMap.has(tx.fixedCostId)) {
+        orphanTxs.push({ ...tx, reason: `fixedCostId="${tx.fixedCostId}" が fixed_costs に存在しない` });
+      }
+    }
+  });
+
+  // ⑤ 孤立 expenses（カード払い）
+  const orphanExpCard = [];
+  expArr.forEach(e => {
+    if (e.payMethod !== 'card') return;
+    const linked = [...cpMap.values()].find(cp =>
+      cp.date === e.date &&
+      (cp.amount || 0) === (e.amount || 0) &&
+      cp.cardId === e.cardId
+    );
+    if (!linked) {
+      orphanExpCard.push({ ...e, reason: '対応する card_pools が存在しない' });
+    }
+  });
+
+  const short = id => (id || '').substring(0, 8);
+  const fmtAmt = n => (n ?? 0).toLocaleString() + '円';
+
+  const makeDetail = (num, title, items, fields) => {
+    if (!items.length) return '';
+    const rows = items.map(r => {
+      const cols = fields.map(f => `<span style="color:var(--text2);font-size:11px;">${f.label}:</span> ${r[f.key] ?? '-'}`).join('　');
+      return `<div style="font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);">${cols}<br><span style="color:var(--bad);font-size:11px;">理由：${r.reason}</span></div>`;
+    }).join('');
+    return `<div class="card" style="margin-top:10px;"><div class="card-title">${num} 詳細</div>${rows}</div>`;
+  };
+
+  const total = orphanPools.length + orphanConfirmed.length + mismatchPools.length + orphanTxs.length + orphanExpCard.length;
+  const summaryColor = total === 0 ? 'var(--good,#4caf50)' : 'var(--bad)';
+  const summaryText = total === 0 ? '✅ 異常なし' : `⚠️ ${total}件の問題を検出`;
+
+  const statRow = (label, count) => {
+    const c = count === 0 ? 'var(--text2)' : 'var(--bad)';
+    return `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value" style="color:${c};">${count}件</span></div>`;
+  };
+
+  const summary = `
+    <div class="card">
+      <div class="card-title" style="font-size:15px;color:${summaryColor};">${summaryText}</div>
+      ${statRow('①孤立 card_pools', orphanPools.length)}
+      ${statRow('②孤立 card_confirmed', orphanConfirmed.length)}
+      ${statRow('③乖離 card_pools', mismatchPools.length)}
+      ${statRow('④孤立 account_txs', orphanTxs.length)}
+      ${statRow('⑤孤立 expenses（カード）', orphanExpCard.length)}
+    </div>`;
+
+  const poolFields = [
+    { label: 'id', key: 'id', fmt: short },
+    { label: 'date', key: 'date' },
+    { label: 'amount', key: 'amount', fmt: fmtAmt },
+    { label: 'memo', key: 'memo' },
+    { label: 'cardId', key: 'cardId' },
+  ];
+
+  const detail1 = makeDetail('①孤立 card_pools', '', orphanPools.map(r => ({ ...r, id: short(r.id), amount: fmtAmt(r.amount) })), [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
+  ]);
+  const detail2 = makeDetail('②孤立 card_confirmed', '', orphanConfirmed.map(r => ({ ...r, id: short(r.id), amount: fmtAmt(r.amount) })), [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'poolId', key: 'poolId' }
+  ]);
+  const detail3 = makeDetail('③乖離 card_pools', '', mismatchPools.map(r => ({ ...r, id: short(r.id), amount: fmtAmt(r.amount) })), [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
+  ]);
+  const detail4 = makeDetail('④孤立 account_txs', '', orphanTxs.map(r => ({ ...r, id: short(r.id), amount: fmtAmt(r.amount) })), [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }
+  ]);
+  const detail5 = makeDetail('⑤孤立 expenses（カード）', '', orphanExpCard.map(r => ({ ...r, id: short(r.id), amount: fmtAmt(r.amount) })), [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
+  ]);
+
+  resultEl.innerHTML = summary + detail1 + detail2 + detail3 + detail4 + detail5;
 };
 
 window.moveSettingItem = async (type, i, delta) => {
