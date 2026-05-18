@@ -4210,55 +4210,51 @@ window.runHealthCheck = async () => {
   const short = id => (id || '').substring(0, 8);
   const fmtAmt = n => (n ?? 0).toLocaleString() + '円';
 
-  const makeDetail = (num, title, items, fields) => {
+  const makeDetail = (label, col, items, fields) => {
     if (!items.length) return '';
     const rows = items.map(r => {
-      const cols = fields.map(f => `<span style="color:var(--text2);font-size:11px;">${f.label}:</span> ${r[f.key] ?? '-'}`).join('　');
-      return `<div style="font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);">${cols}<br><span style="color:var(--bad);font-size:11px;">理由：${r.reason}</span></div>`;
+      const info = fields.map(f => {
+        const val = f.key === 'id' ? short(r[f.key]) : f.key === 'amount' ? fmtAmt(r[f.key]) : (r[f.key] ?? '-');
+        return `<span style="color:var(--text2);font-size:11px;">${f.label}:</span> ${val}`;
+      }).join('　');
+      return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;border-bottom:1px solid var(--border);padding:8px 0;"><div style="flex:1;font-size:12px;"><div>${info}</div><div style="color:var(--bad);margin-top:2px;font-size:11px;">理由：${r.reason}</div></div><button class="btn-icon-del" onclick="deleteHealthCheckOne('${col}','${r.id}')">🗑️</button></div>`;
     }).join('');
-    return `<div class="card" style="margin-top:10px;"><div class="card-title">${num} 詳細</div>${rows}</div>`;
+    return `<div class="card" style="margin-top:10px;"><div class="card-title">${label} 詳細</div>${rows}</div>`;
   };
 
   const total = orphanPools.length + orphanConfirmed.length + mismatchPools.length + orphanTxs.length + orphanExpCard.length;
   const summaryColor = total === 0 ? 'var(--good,#4caf50)' : 'var(--bad)';
-  const summaryText = total === 0 ? '✅ 異常なし' : `⚠️ ${total}件の問題を検出`;
+  const summaryText = total === 0 ? '✅ データは健全です' : `⚠️ ${total}件の確認すべきデータがあります`;
 
-  const statRow = (label, count) => {
+  const statRow = (label, count, sub) => {
     const c = count === 0 ? 'var(--text2)' : 'var(--bad)';
-    return `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value" style="color:${c};">${count}件</span></div>`;
+    const subHtml = sub ? `<div style="font-size:10px;color:var(--text2);margin-top:2px;margin-left:8px;">${sub}</div>` : '';
+    return `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value" style="color:${c};">${count}件</span></div>${subHtml}`;
   };
 
   const summary = `
     <div class="card">
       <div class="card-title" style="font-size:15px;color:${summaryColor};">${summaryText}</div>
-      ${statRow('①孤立 card_pools', orphanPools.length)}
-      ${statRow('②孤立 card_confirmed', orphanConfirmed.length)}
-      ${statRow('③乖離 card_pools', mismatchPools.length)}
-      ${statRow('④孤立 account_txs', orphanTxs.length)}
-      ${statRow('⑤孤立 expenses（カード）', orphanExpCard.length)}
+      ${statRow('① 未払いプール：元データなし', orphanPools.length, '支出タブ・固定費タブのどちらにも対応データがありません')}
+      ${statRow('② 引き落とし済み：元プールなし', orphanConfirmed.length, '対応する未払いプール記録が見つかりません')}
+      ${statRow('③ 未払いプール：固定費と金額が不一致', mismatchPools.length, '固定費の金額が変更されたが、未払いプール側に反映されていません')}
+      ${statRow('④ 口座記録：元データなし', orphanTxs.length, '対応する収入・支出・固定費が見つかりません')}
+      ${statRow('⑤ カード支出：未払いプールなし', orphanExpCard.length, 'カード払いの支出だが、未払いプール記録が見当たりません')}
     </div>`;
 
-  const poolFields = [
-    { label: 'id', key: 'id', fmt: short },
-    { label: 'date', key: 'date' },
-    { label: 'amount', key: 'amount', fmt: fmtAmt },
-    { label: 'memo', key: 'memo' },
-    { label: 'cardId', key: 'cardId' },
-  ];
-
-  const detail1 = makeDetail('①孤立 card_pools', '', orphanPools.map(r => ({ ...r, id: short(r.id), amount: fmtAmt(r.amount) })), [
+  const detail1 = makeDetail('① 未払いプール：元データなし', 'card_pools', orphanPools, [
     { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
   ]);
-  const detail2 = makeDetail('②孤立 card_confirmed', '', orphanConfirmed.map(r => ({ ...r, id: short(r.id), amount: fmtAmt(r.amount) })), [
+  const detail2 = makeDetail('② 引き落とし済み：元プールなし', 'card_confirmed', orphanConfirmed, [
     { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'poolId', key: 'poolId' }
   ]);
-  const detail3 = makeDetail('③乖離 card_pools', '', mismatchPools.map(r => ({ ...r, id: short(r.id), amount: fmtAmt(r.amount) })), [
+  const detail3 = makeDetail('③ 未払いプール：固定費と金額が不一致', 'card_pools', mismatchPools, [
     { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
   ]);
-  const detail4 = makeDetail('④孤立 account_txs', '', orphanTxs.map(r => ({ ...r, id: short(r.id), amount: fmtAmt(r.amount) })), [
+  const detail4 = makeDetail('④ 口座記録：元データなし', 'account_txs', orphanTxs, [
     { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }
   ]);
-  const detail5 = makeDetail('⑤孤立 expenses（カード）', '', orphanExpCard.map(r => ({ ...r, id: short(r.id), amount: fmtAmt(r.amount) })), [
+  const detail5 = makeDetail('⑤ カード支出：未払いプールなし', 'expenses', orphanExpCard, [
     { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
   ]);
 
@@ -4276,6 +4272,24 @@ window.runHealthCheck = async () => {
   const countEl = document.getElementById('healthDeleteCount');
   if (wrap) wrap.style.display = deleteCount > 0 ? 'block' : 'none';
   if (countEl) countEl.textContent = deleteCount;
+};
+
+window.deleteHealthCheckOne = (col, id) => {
+  showConfirm(
+    `このデータを削除しますか？\nコレクション：${col}\nid：${id}`,
+    async () => {
+      try {
+        await deleteDoc(doc(db, col, id));
+        showToast('削除しました');
+        await loadMonthData();
+        runHealthCheck();
+      } catch(e) {
+        console.error('削除失敗:', e);
+        showToast('削除に失敗しました');
+      }
+    },
+    '削除する'
+  );
 };
 
 window.deleteHealthCheckIssues = () => {
