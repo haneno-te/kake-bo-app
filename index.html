@@ -580,6 +580,12 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .calc-display.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(56,189,248,0.2);
   }
   .calc-result {
     font-size: 24px;
@@ -1688,7 +1694,9 @@ let currentFixPayMethod = null;
 let confirmCallback = null;
 
 // ===== 電卓 =====
-const calcState = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', adj:'', initBal:'', fp:'', fpfee:'' };
+const calcState    = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', adj:'', initBal:'', fp:'', fpfee:'' };
+const calcOverwrite = { exp:true, inc:true, tx:true, txfee:true, fix:true, fixact:true, adj:true, initBal:true, fp:true, fpfee:true };
+let activeCalc = '';
 
 function calcEval(expr) {
   try {
@@ -1728,24 +1736,45 @@ function calcGetValue(prefix) {
   return r !== null ? r : (parseInt(expr) || 0);
 }
 
+function calcSet(prefix, value) {
+  calcState[prefix] = String(value);
+  calcOverwrite[prefix] = true;
+  calcUpdate(prefix);
+}
+
 window.calcPress = (prefix, key) => {
-  const state = calcState[prefix];
   const ops = ['+','-','*','/'];
-  if (ops.includes(key) && ops.includes(state.slice(-1))) {
-    calcState[prefix] = state.slice(0,-1) + key;
+  if (ops.includes(key)) {
+    const s = calcState[prefix];
+    if (ops.includes(s.slice(-1))) {
+      calcState[prefix] = s.slice(0,-1) + key;
+    } else {
+      calcState[prefix] += key;
+    }
   } else {
-    calcState[prefix] += key;
+    // 数字キー
+    if (calcOverwrite[prefix]) {
+      calcState[prefix] = (key === '00') ? '0' : key;
+      calcOverwrite[prefix] = false;
+    } else if (calcState[prefix] === '0') {
+      if (key !== '0' && key !== '00') calcState[prefix] = key;
+      // '0' or '00' → stay '0'
+    } else {
+      calcState[prefix] += key;
+    }
   }
   calcUpdate(prefix);
 };
 
 window.calcDel = (prefix) => {
+  calcOverwrite[prefix] = false;
   calcState[prefix] = calcState[prefix].slice(0,-1);
   calcUpdate(prefix);
 };
 
 window.calcClr = (prefix) => {
   calcState[prefix] = '';
+  calcOverwrite[prefix] = true;
   calcUpdate(prefix);
 };
 let isComposing = false;
@@ -2860,8 +2889,8 @@ window.openFixedPayModal = (id) => {
   if (!f.payMethod) { alert('支払い方法を設定してください'); return; }
   document.getElementById('fixedPayModalTitle').textContent = `${f.name} 今月分を登録`;
   document.getElementById('fp-fixedCostId').value = id;
-  calcState['fp'] = String(f.actualAmount || f.amount || ''); calcUpdate('fp');
-  calcState['fpfee'] = ''; calcUpdate('fpfee');
+  calcSet('fp', f.actualAmount || f.amount || '');
+  calcSet('fpfee', '');
   const ym = currentYM();
   document.getElementById('fp-date').value = f.payMethod === 'card' ? ym + '-01' : todayStr();
   document.getElementById('fpFeeWrap').style.display = f.payMethod === 'transfer' ? 'block' : 'none';
@@ -2932,8 +2961,8 @@ window.openFixedModal = (id = null) => {
     const f = fixedCosts.find(x => x.id === id);
     if (f) {
       document.getElementById('fix-name').value = f.name || '';
-      calcState['fix'] = String(f.amount || ''); calcUpdate('fix');
-      calcState['fixact'] = String(f.actualAmount || ''); calcUpdate('fixact');
+      calcSet('fix', f.amount || '');
+      calcSet('fixact', f.actualAmount || '');
       document.getElementById('fix-type').value = f.fixedType || 'fixed';
       setFixKind(f.kind || 'private');
       document.getElementById('fix-payDay').value = f.payDay || '';
@@ -2952,8 +2981,8 @@ window.openFixedModal = (id = null) => {
     }
   } else {
     document.getElementById('fix-name').value = '';
-    calcState['fix'] = ''; calcUpdate('fix');
-    calcState['fixact'] = ''; calcUpdate('fixact');
+    calcSet('fix', '');
+    calcSet('fixact', '');
     document.getElementById('fix-type').value = 'fixed';
     setFixKind('private');
     document.getElementById('fix-payDay').value = '';
@@ -3347,7 +3376,7 @@ window.openExpenseModal = (id = null, date = null) => {
   if (id) {
     const e = expenses.find(x => x.id === id);
     if (!e) return;
-    calcState['exp'] = String(e.amount || ''); calcUpdate('exp');
+    calcSet('exp', e.amount || '');
     document.getElementById('exp-date').value = e.date || todayStr();
     document.getElementById('exp-categoryId').value = e.categoryId || '';
     document.getElementById('exp-shop').value = e.shop || '';
@@ -3363,7 +3392,7 @@ window.openExpenseModal = (id = null, date = null) => {
     bList.innerHTML = '';
     (e.breakdowns||[]).forEach(b => appendBreakdownRow(b));
   } else {
-    calcState['exp'] = ''; calcUpdate('exp');
+    calcSet('exp', '');
     document.getElementById('exp-date').value = date || todayStr();
     document.getElementById('exp-categoryId').value = '';
     document.getElementById('exp-shop').value = '';
@@ -3389,7 +3418,7 @@ window.saveExpense = async () => {
   const breakdowns = [];
   document.querySelectorAll('#expBreakdownList .breakdown-row').forEach(row => {
     const nameInput = row.querySelector('input[type=text]');
-    const amtInput = row.querySelector('input[type=number]');
+    const amtInput = row.querySelector('.bd-amount');
     const badCheck = row.querySelector('.bad-check');
     const badSel = row.querySelector('.bad-cat-sel');
     const itemSel = row.querySelector('.bd-item-sel');
@@ -3583,7 +3612,7 @@ function appendBreakdownRow(b = {}) {
     </select>
     <div class="breakdown-row-top">
       <input type="text" placeholder="項目名" value="${b.name||''}">
-      <input type="number" placeholder="金額" value="${b.amount||''}">
+      <input type="text" inputmode="numeric" class="bd-amount" placeholder="金額" value="${b.amount||''}">
       <button onclick="window.removeBreakdownRowWithConfirm(this)">×</button>
     </div>
     <label class="bad-row-toggle">
@@ -3648,14 +3677,14 @@ window.openIncomeModal = (id = null, date = null) => {
   if (id) {
     const e = incomes.find(x => x.id === id);
     if (!e) return;
-    calcState['inc'] = String(e.amount || ''); calcUpdate('inc');
+    calcSet('inc', e.amount || '');
     document.getElementById('inc-date').value = e.date || todayStr();
     document.getElementById('inc-typeId').value = e.typeId || '';
     document.getElementById('inc-accountId').value = e.accountId || '';
     document.getElementById('inc-memo').value = e.memo || '';
     document.getElementById('incAccountAmtWrap').style.display = e.accountId ? 'block' : 'none';
   } else {
-    calcState['inc'] = ''; calcUpdate('inc');
+    calcSet('inc', '');
     document.getElementById('inc-date').value = date || todayStr();
     document.getElementById('inc-typeId').value = '';
     document.getElementById('inc-accountId').value = '';
@@ -3732,8 +3761,8 @@ window.openAccountTxModal = (id = null, date = null, accountId = null, txType = 
   if (id) {
     const t = accountTxs.find(x => x.id === id);
     if (t) {
-      calcState['tx'] = String(t.amount || ''); calcUpdate('tx');
-      calcState['txfee'] = ''; calcUpdate('txfee');
+      calcSet('tx', t.amount || '');
+      calcSet('txfee', '');
       document.getElementById('tx-date').value = t.date || todayStr();
       document.getElementById('tx-memo').value = t.memo || '';
       document.getElementById('tx-accountId').value = t.accountId || '';
@@ -3742,8 +3771,8 @@ window.openAccountTxModal = (id = null, date = null, accountId = null, txType = 
     }
   } else {
     document.getElementById('tx-date').value = date || todayStr();
-    calcState['tx'] = ''; calcUpdate('tx');
-    calcState['txfee'] = ''; calcUpdate('txfee');
+    calcSet('tx', '');
+    calcSet('txfee', '');
     document.getElementById('tx-memo').value = '';
     document.getElementById('tx-accountId').value = accountId || '';
     setTxType(txType || 'deposit');
@@ -3806,7 +3835,7 @@ window.openAdjustModal = (accountId, calcBal) => {
   const acc = settings.accounts.find(a => a.id === accountId);
   document.getElementById('adjustTitle').textContent = `差額調整：${acc?.name||''}`;
   document.getElementById('adjustCalcBal').textContent = '¥' + calcBal.toLocaleString();
-  calcState['adj'] = ''; calcUpdate('adj');
+  calcSet('adj', '');
   document.getElementById('adjust-date').value = todayStr();
   openModal('adjustModal');
 };
@@ -4095,7 +4124,7 @@ window.openInitBalModal = (id, name, currentBal, currentDate = '') => {
   _initBalAccountId = id;
   document.getElementById('initBalModalTitle').textContent = `口座を編集：${name}`;
   document.getElementById('initBal-name').value = name;
-  calcState['initBal'] = String(currentBal || ''); calcUpdate('initBal');
+  calcSet('initBal', currentBal || '');
   document.getElementById('initBal-date').value = currentDate || todayStr();
   openModal('initBalModal');
 };
@@ -4633,7 +4662,26 @@ function openModal(id) {
   document.querySelectorAll('.modal-overlay.open').forEach(el => {
     if (el.id !== id) el.classList.remove('open');
   });
-  document.getElementById(id).classList.add('open');
+  const modalEl = document.getElementById(id);
+  modalEl.classList.add('open');
+  // アクティブ電卓リセット
+  activeCalc = '';
+  document.querySelectorAll('.calc-display.active').forEach(el => el.classList.remove('active'));
+  setTimeout(() => {
+    const sheet = modalEl.querySelector('.modal-sheet');
+    if (!sheet) return;
+    const firstCalc = sheet.querySelector('.calc-display');
+    if (firstCalc) {
+      const resultEl = firstCalc.querySelector('[id$="-calcResult"]');
+      if (resultEl) {
+        activeCalc = resultEl.id.replace('-calcResult', '');
+        firstCalc.classList.add('active');
+      }
+      sheet.scrollTop = Math.max(0, firstCalc.offsetTop - 20);
+    } else {
+      sheet.scrollTop = 0;
+    }
+  }, 50);
 }
 window.closeModal = (id) => {
   document.getElementById(id).classList.remove('open');
@@ -4698,6 +4746,38 @@ document.addEventListener('keydown', (e) => {
 // confirmOverlay内でのEnterキーを完全無効化
 document.getElementById('confirmOverlay').addEventListener('keydown', e => {
   if (e.key === 'Enter') e.preventDefault();
+});
+
+// calc-display クリックでアクティブ電卓を切替
+document.addEventListener('click', (e) => {
+  const display = e.target.closest('.calc-display');
+  if (!display) return;
+  const resultEl = display.querySelector('[id$="-calcResult"]');
+  if (!resultEl) return;
+  const prefix = resultEl.id.replace('-calcResult', '');
+  if (activeCalc !== prefix) {
+    document.querySelectorAll('.calc-display.active').forEach(el => el.classList.remove('active'));
+    display.classList.add('active');
+    activeCalc = prefix;
+  }
+});
+
+// 電卓キーボード入力
+document.addEventListener('keydown', (e) => {
+  if (!activeCalc) return;
+  if (isComposing) return;
+  if (document.getElementById('confirmOverlay').classList.contains('open')) return;
+  if (!document.querySelector('.modal-overlay.open')) return;
+  const tag = document.activeElement.tagName;
+  if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(tag)) return;
+  const numMatch = e.key.match(/^[0-9]$/);
+  if (numMatch)            { e.preventDefault(); calcPress(activeCalc, e.key); }
+  else if (e.key === '+')  { e.preventDefault(); calcPress(activeCalc, '+'); }
+  else if (e.key === '-')  { e.preventDefault(); calcPress(activeCalc, '-'); }
+  else if (e.key === '*')  { e.preventDefault(); calcPress(activeCalc, '*'); }
+  else if (e.key === '/')  { e.preventDefault(); calcPress(activeCalc, '/'); }
+  else if (e.key === 'Backspace') { e.preventDefault(); calcDel(activeCalc); }
+  else if (e.key === 'Escape')    { e.preventDefault(); calcClr(activeCalc); }
 });
 
 // 内訳行の削除確認
