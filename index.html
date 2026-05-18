@@ -746,10 +746,6 @@
 
 <!-- カードタブ -->
 <div class="tab-content" id="tab-card">
-  <div style="display:flex;gap:8px;margin-bottom:8px;">
-    <button class="btn-sm" style="border-color:var(--card-color);color:var(--card-color);" onclick="openCardPoolModal()">＋ 購入記録追加</button>
-    <button class="btn-sm accent" onclick="openCardFixedModal()">＋ 固定項目追加</button>
-  </div>
   <div style="font-size:11px;color:var(--text2);margin-bottom:10px;">✅で支払い月を確定 → 引き落とし確定済みへ移動</div>
   <div id="cardAccordionList"></div>
 </div>
@@ -1307,96 +1303,6 @@
 </div>
 
 <!-- カード購入記録モーダル（プール追加） -->
-<div class="modal-overlay" id="cardPoolModal">
-  <div class="modal-sheet">
-    <div class="modal-header">
-      <div class="modal-title" id="cardPoolModalTitle">カード購入記録</div>
-      <button class="modal-close" onclick="closeModal('cardPoolModal')">×</button>
-    </div>
-    <div class="form-row">
-      <label class="form-label">金額（円）</label>
-      <div class="calc-display">
-        <div class="calc-result zero" id="cp-calcResult">0</div>
-        <div class="calc-expr" id="cp-calcExpr"></div>
-      </div>
-      <div class="calc-grid">
-        <button class="calc-btn" onclick="calcPress('cp','7')">7</button>
-        <button class="calc-btn" onclick="calcPress('cp','8')">8</button>
-        <button class="calc-btn" onclick="calcPress('cp','9')">9</button>
-        <button class="calc-btn op" onclick="calcPress('cp','+')">＋</button>
-        <button class="calc-btn" onclick="calcPress('cp','4')">4</button>
-        <button class="calc-btn" onclick="calcPress('cp','5')">5</button>
-        <button class="calc-btn" onclick="calcPress('cp','6')">6</button>
-        <button class="calc-btn op" onclick="calcPress('cp','-')">－</button>
-        <button class="calc-btn" onclick="calcPress('cp','1')">1</button>
-        <button class="calc-btn" onclick="calcPress('cp','2')">2</button>
-        <button class="calc-btn" onclick="calcPress('cp','3')">3</button>
-        <button class="calc-btn op" onclick="calcPress('cp','*')">×</button>
-        <button class="calc-btn span2" onclick="calcPress('cp','0')">0</button>
-        <button class="calc-btn" onclick="calcPress('cp','00')">00</button>
-        <button class="calc-btn op" onclick="calcPress('cp','/')">÷</button>
-        <button class="calc-btn span3" onclick="calcClr('cp')">クリア</button>
-        <button class="calc-btn del" onclick="calcDel('cp')">⌫</button>
-      </div>
-    </div>
-    <div class="form-row">
-      <label class="form-label">購入日</label>
-      <input type="date" class="form-input" id="cp-date">
-    </div>
-    <div class="form-row">
-      <label class="form-label">カード</label>
-      <select class="form-select" id="cp-cardId">
-        <option value="">-- カードを選択 --</option>
-      </select>
-    </div>
-    <div class="form-row">
-      <label class="form-label">内容</label>
-      <input type="text" class="form-input" id="cp-memo" placeholder="例：家電購入">
-    </div>
-    <div class="form-row">
-      <label class="form-label">支払方式</label>
-      <div class="type-selector" id="cpInstallSelector">
-        <button class="type-btn active" onclick="setCpInstall('once')">一括</button>
-        <button class="type-btn" onclick="setCpInstall('installment')">分割</button>
-      </div>
-    </div>
-    <div id="cpInstallWrap" style="display:none;">
-      <div class="form-row">
-        <label class="form-label">分割回数</label>
-        <input type="number" class="form-input" id="cp-installCount" placeholder="例：12" inputmode="numeric">
-      </div>
-      <div class="form-row">
-        <label class="form-label">1回あたりの支払額（円）</label>
-        <div class="calc-display">
-          <div class="calc-result zero" id="cpinst-calcResult">0</div>
-          <div class="calc-expr" id="cpinst-calcExpr"></div>
-        </div>
-        <div class="calc-grid">
-          <button class="calc-btn" onclick="calcPress('cpinst','7')">7</button>
-          <button class="calc-btn" onclick="calcPress('cpinst','8')">8</button>
-          <button class="calc-btn" onclick="calcPress('cpinst','9')">9</button>
-          <button class="calc-btn op" onclick="calcPress('cpinst','+')">＋</button>
-          <button class="calc-btn" onclick="calcPress('cpinst','4')">4</button>
-          <button class="calc-btn" onclick="calcPress('cpinst','5')">5</button>
-          <button class="calc-btn" onclick="calcPress('cpinst','6')">6</button>
-          <button class="calc-btn op" onclick="calcPress('cpinst','-')">－</button>
-          <button class="calc-btn" onclick="calcPress('cpinst','1')">1</button>
-          <button class="calc-btn" onclick="calcPress('cpinst','2')">2</button>
-          <button class="calc-btn" onclick="calcPress('cpinst','3')">3</button>
-          <button class="calc-btn op" onclick="calcPress('cpinst','*')">×</button>
-          <button class="calc-btn span2" onclick="calcPress('cpinst','0')">0</button>
-          <button class="calc-btn" onclick="calcPress('cpinst','00')">00</button>
-          <button class="calc-btn op" onclick="calcPress('cpinst','/')">÷</button>
-          <button class="calc-btn span3" onclick="calcClr('cpinst')">クリア</button>
-          <button class="calc-btn del" onclick="calcDel('cpinst')">⌫</button>
-        </div>
-      </div>
-    </div>
-    <button class="btn-primary" onclick="saveCardPool()">プールに追加</button>
-    <button class="btn-secondary" onclick="closeModal('cardPoolModal')">キャンセル</button>
-  </div>
-</div>
-
 <!-- カード支払い確定モーダル（チェック時） -->
 <div class="modal-overlay" id="cardConfirmModal">
   <div class="modal-sheet">
@@ -1422,35 +1328,6 @@
   </div>
 </div>
 
-<!-- カード固定項目モーダル -->
-<div class="modal-overlay" id="cardFixedModal">
-  <div class="modal-sheet">
-    <div class="modal-header">
-      <div class="modal-title" id="cardFixedModalTitle">固定項目を追加</div>
-      <button class="modal-close" onclick="closeModal('cardFixedModal')">×</button>
-    </div>
-    <div class="form-row">
-      <label class="form-label">引き落とし月</label>
-      <input type="month" class="form-input" id="cf-month">
-    </div>
-    <div class="form-row">
-      <label class="form-label">カード</label>
-      <select class="form-select" id="cf-cardId">
-        <option value="">-- カードを選択 --</option>
-      </select>
-    </div>
-    <div class="form-row">
-      <label class="form-label">内容</label>
-      <input type="text" class="form-input" id="cf-memo" placeholder="例：通信費・サブスク">
-    </div>
-    <div class="form-row">
-      <label class="form-label">金額（円）</label>
-      <input type="number" class="form-input" id="cf-amount" placeholder="0" inputmode="numeric">
-    </div>
-    <button class="btn-primary" onclick="saveCardFixed()">保存</button>
-    <button class="btn-secondary" onclick="closeModal('cardFixedModal')">キャンセル</button>
-  </div>
-</div>
 
 <!-- 固定費モーダル -->
 <div class="modal-overlay" id="fixedModal">
@@ -1742,21 +1619,17 @@ let settings = {
 let editingExpenseId = null;
 let editingIncomeId = null;
 let editingFixedId = null;
-let editingCardPoolId = null;
-let editingCardFixedId = null;
-let editingCardFixedFromPool = false;
 let editingAccountTxId = null;
 let currentExpFilter = 'all';
 let currentPayMethod = 'cash';
 let currentExpType = 'private';
 let currentFixKind = 'private';
 let currentTxType = 'deposit';
-let currentCpInstall = 'once';
 let currentFixPayMethod = null;
 let confirmCallback = null;
 
 // ===== 電卓 =====
-const calcState = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', cp:'', cpinst:'', adj:'', initBal:'', fp:'' };
+const calcState = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', adj:'', initBal:'', fp:'' };
 
 function calcEval(expr) {
   try {
@@ -2666,13 +2539,6 @@ function renderCardTab() {
           }
           const autoGenBadge = c.autoGenerated
             ? `<span style="font-size:10px;background:rgba(108,143,255,0.15);color:var(--accent);border-radius:3px;padding:1px 5px;margin-left:4px;">固定</span>` : '';
-          const editAction = c.autoGenerated
-            ? `openFixedFromCard('${c.fixedCostId}')`
-            : `openCardPoolModal('${c.id}')`;
-          const deleteAction = c.autoGenerated
-            ? `switchTab('fixed');openFixedModal('${c.fixedCostId}');showToast('固定費タブで削除してください')`
-            : `deleteCardPool('${c.id}')`;
-          const deleteLabel = c.autoGenerated ? '🗑️ 固定費から削除' : '🗑️ 削除';
           return `<div class="card-pool-item" id="cp-${c.id}">
             <div class="card-pool-top">
               <input type="checkbox" class="card-pool-check" onchange="onCardPoolCheck('${c.id}', this)">
@@ -2682,25 +2548,16 @@ function renderCardTab() {
               </div>
               <div class="card-pool-amount">¥${(c.amount||0).toLocaleString()}</div>
             </div>
-            <div class="card-pool-actions">
-              <button class="btn-edit" onclick="${editAction}">✏️ 編集</button>
-              <button class="btn-del" onclick="${deleteAction}">${deleteLabel}</button>
-            </div>
           </div>`;
         }).join('');
 
     const confirmedHtml = confirmed.length === 0
       ? '<div class="loading">今月の確定記録なし</div>'
       : confirmed.map(c => `<div class="card-confirmed-item">
-          <input type="checkbox" checked onchange="if(!this.checked){this.checked=true;returnToPool('${c.id}',${c.fromPool||false})}" style="accent-color:var(--card-color);width:16px;height:16px;cursor:pointer;flex-shrink:0;margin-right:6px;">
           <div style="flex:1;">
             <div style="font-size:13px;font-weight:600;">${c.memo || '（内容なし）'}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div style="font-size:15px;font-weight:700;color:var(--card-color);">¥${(c.total||0).toLocaleString()}</div>
-            <button class="btn-edit" onclick="openCardFixedModal('${c.id}', ${c.fromPool||false})">✏️ 編集</button>
-            <button class="btn-del" onclick="deleteCardConfirmed('${c.id}', ${c.fromPool||false})">🗑️ 削除</button>
-          </div>
+          <div style="font-size:15px;font-weight:700;color:var(--card-color);">¥${(c.total||0).toLocaleString()}</div>
         </div>`).join('');
 
     const totalLabel = confirmedTotal > 0
@@ -2811,68 +2668,6 @@ window.confirmCardPayment = async () => {
   showToast('支払い確定しました');
 };
 
-window.openCardPoolModal = (id = null) => {
-  editingCardPoolId = id;
-  document.getElementById('cardPoolModalTitle').textContent = id ? 'カード購入記録を編集' : 'カード購入記録';
-  if (id) {
-    const c = cardPools.find(x => x.id === id);
-    if (c) {
-      calcState['cp'] = String(c.amount || ''); calcUpdate('cp');
-      document.getElementById('cp-date').value = c.date || todayStr();
-      document.getElementById('cp-cardId').value = c.cardId || '';
-      document.getElementById('cp-memo').value = c.memo || '';
-      setCpInstall(c.installType || 'once');
-      if (c.installType === 'installment') {
-        document.getElementById('cp-installCount').value = c.installCount || '';
-        calcState['cpinst'] = String(c.installAmt || ''); calcUpdate('cpinst');
-      }
-    }
-  } else {
-    calcState['cp'] = ''; calcUpdate('cp');
-    calcState['cpinst'] = ''; calcUpdate('cpinst');
-    document.getElementById('cp-date').value = todayStr();
-    document.getElementById('cp-cardId').value = '';
-    document.getElementById('cp-memo').value = '';
-    setCpInstall('once');
-  }
-  openModal('cardPoolModal');
-};
-
-window.saveCardPool = async () => {
-  const amount = calcGetValue('cp');
-  const date = document.getElementById('cp-date').value;
-  const cardId = document.getElementById('cp-cardId').value;
-  const memo = document.getElementById('cp-memo').value.trim();
-  if (!amount || !date) { alert('金額と購入日は必須です'); return; }
-  const data = { amount, date, cardId, memo, installType: currentCpInstall };
-  if (currentCpInstall === 'installment') {
-    data.installCount = parseInt(document.getElementById('cp-installCount').value) || 0;
-    data.installAmt = calcGetValue('cpinst');
-    data.remainCount = data.installCount;
-  }
-  if (editingCardPoolId) {
-    await updateDoc(doc(db, 'card_pools', editingCardPoolId), data);
-  } else {
-    await addDoc(collection(db, 'card_pools'), data);
-  }
-  closeModal('cardPoolModal');
-  await loadMonthData();
-};
-
-window.deleteCardPool = (id) => {
-  showConfirm('このカード購入記録を削除しますか？', async () => {
-    await deleteDoc(doc(db, 'card_pools', id));
-    await loadMonthData();
-  });
-};
-
-window.openFixedFromCard = (id) => {
-  if (!id) return;
-  switchTab('fixed');
-  openFixedModal(id);
-  showToast('固定費タブで編集してください');
-};
-
 window.openBillingOverrideModal = (cardId) => {
   const card = settings.cards.find(c => c.id === cardId);
   if (!card) return;
@@ -2897,90 +2692,6 @@ window.saveBillingOverride = async () => {
   closeModal('billingOverrideModal');
   await loadMonthData();
   showToast('引き落とし日を変更しました');
-};
-
-window.deleteCardConfirmed = (id, fromPool) => {
-  showConfirm('この確定記録を削除しますか？', async () => {
-    if (fromPool) {
-      await updateDoc(doc(db, 'card_pools', id), { confirmedMonth: null });
-    } else {
-      await deleteDoc(doc(db, 'card_confirmed', id));
-    }
-    await loadMonthData();
-  });
-};
-
-window.returnToPool = (id, fromPool) => {
-  showConfirm('確定を取り消してプールに戻しますか？', async () => {
-    if (fromPool) {
-      await updateDoc(doc(db, 'card_pools', id), { confirmedMonth: null });
-    } else {
-      const c = cardConfirmed.find(x => x.id === id);
-      if (c) {
-        await addDoc(collection(db, 'card_pools'), {
-          amount: c.total || 0,
-          date: todayStr(),
-          cardId: c.cardId,
-          memo: c.memo || '',
-          installType: 'once'
-        });
-        await deleteDoc(doc(db, 'card_confirmed', id));
-      }
-    }
-    await loadMonthData();
-    showToast('プールに戻しました');
-  });
-};
-
-window.openCardFixedModal = (id = null, fromPool = false) => {
-  editingCardFixedId = id;
-  editingCardFixedFromPool = fromPool;
-  document.getElementById('cardFixedModalTitle').textContent = id ? '固定項目を編集' : '固定項目を追加';
-  const ym = currentYM();
-  document.getElementById('cf-month').value = ym;
-  document.getElementById('cf-cardId').value = '';
-  document.getElementById('cf-memo').value = '';
-  document.getElementById('cf-amount').value = '';
-  if (id) {
-    if (fromPool) {
-      const c = cardPools.find(x => x.id === id);
-      if (c) {
-        document.getElementById('cf-month').value = c.confirmedMonth || ym;
-        document.getElementById('cf-cardId').value = c.cardId || '';
-        document.getElementById('cf-memo').value = c.memo || '';
-        document.getElementById('cf-amount').value =
-          c.installType === 'installment' ? (c.installAmt||0) : (c.amount||0);
-      }
-    } else {
-      const c = cardConfirmed.find(x => x.id === id);
-      if (c) {
-        document.getElementById('cf-month').value = c.month || ym;
-        document.getElementById('cf-cardId').value = c.cardId || '';
-        document.getElementById('cf-memo').value = c.memo || '';
-        document.getElementById('cf-amount').value = c.total || '';
-      }
-    }
-  }
-  openModal('cardFixedModal');
-};
-
-window.saveCardFixed = async () => {
-  const month = document.getElementById('cf-month').value;
-  const cardId = document.getElementById('cf-cardId').value;
-  const memo = document.getElementById('cf-memo').value.trim();
-  const total = parseInt(document.getElementById('cf-amount').value) || 0;
-  if (!month || !total) { alert('年月と金額は必須です'); return; }
-  if (editingCardFixedId) {
-    if (editingCardFixedFromPool) {
-      await updateDoc(doc(db, 'card_pools', editingCardFixedId), { confirmedMonth: month, cardId, memo });
-    } else {
-      await updateDoc(doc(db, 'card_confirmed', editingCardFixedId), { month, cardId, memo, total });
-    }
-  } else {
-    await addDoc(collection(db, 'card_confirmed'), { month, cardId, memo, total });
-  }
-  closeModal('cardFixedModal');
-  await loadMonthData();
 };
 
 // ===== 固定費タブ =====
@@ -4435,14 +4146,6 @@ window.setTxType = (type) => {
   document.getElementById('txAccountLabel').textContent = labels[type] || '口座';
 };
 
-window.setCpInstall = (type) => {
-  currentCpInstall = type;
-  document.querySelectorAll('#cpInstallSelector .type-btn').forEach((btn, i) => {
-    btn.classList.toggle('active', ['once','installment'][i] === type);
-  });
-  document.getElementById('cpInstallWrap').style.display = type === 'installment' ? 'block' : 'none';
-};
-
 window.setExpFilter = (filter) => {
   currentExpFilter = filter;
   ['all','work','private','other'].forEach(f => {
@@ -4475,8 +4178,6 @@ window.closeModal = (id) => {
     'expenseModal':    () => { editingExpenseId = null; },
     'incomeModal':     () => { editingIncomeId = null; },
     'fixedModal':      () => { editingFixedId = null; },
-    'cardPoolModal':   () => { editingCardPoolId = null; },
-    'cardFixedModal':  () => { editingCardFixedId = null; editingCardFixedFromPool = false; },
     'accountTxModal':  () => { editingAccountTxId = null; },
     'settingEditModal':() => { editingSettingId = null; editingSettingType = null; },
     'cardConfirmModal':() => { cardConfirmTargetId = null; },
