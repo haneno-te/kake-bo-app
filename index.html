@@ -1582,6 +1582,32 @@
       <label class="form-label">日付</label>
       <input type="date" class="form-input" id="fp-date">
     </div>
+    <div class="form-row" id="fpFeeWrap" style="display:none;">
+      <label class="form-label">振込手数料（円）</label>
+      <div class="calc-display">
+        <div class="calc-result zero" id="fpfee-calcResult">0</div>
+        <div class="calc-expr" id="fpfee-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('fpfee','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('fpfee','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('fpfee','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('fpfee','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('fpfee','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('fpfee','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('fpfee','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('fpfee','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('fpfee','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('fpfee','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('fpfee','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('fpfee','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('fpfee','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('fpfee','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('fpfee','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('fpfee')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('fpfee')">⌫</button>
+      </div>
+    </div>
     <input type="hidden" id="fp-fixedCostId">
     <button class="btn-primary" onclick="saveFixedPay()">登録</button>
     <button class="btn-secondary" onclick="closeModal('fixedPayModal')">キャンセル</button>
@@ -1605,7 +1631,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
-         getDocs, onSnapshot, query, where, orderBy }
+         getDocs, onSnapshot, query, where, orderBy, writeBatch }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -1652,7 +1678,7 @@ let currentFixPayMethod = null;
 let confirmCallback = null;
 
 // ===== 電卓 =====
-const calcState = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', adj:'', initBal:'', fp:'' };
+const calcState = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', adj:'', initBal:'', fp:'', fpfee:'' };
 
 function calcEval(expr) {
   try {
@@ -2628,12 +2654,11 @@ window.onCardPoolCheck = (id, checkbox) => {
   if (c.installType === 'installment') {
     installWrap.style.display = 'block';
     document.getElementById('ccInstallAmtInput').value = c.installAmt || 0;
-    document.getElementById('ccFeeWrap').style.display = 'block';
-    document.getElementById('ccFeeInput').value = '';
   } else {
     installWrap.style.display = 'none';
-    document.getElementById('ccFeeWrap').style.display = 'none';
   }
+  document.getElementById('ccFeeWrap').style.display = 'block';
+  document.getElementById('ccFeeInput').value = '';
   openModal('cardConfirmModal');
   // ボトムシート展開時のゴーストクリック・Enter誤発火による即時確定を防ぐ
   cardConfirmGuard = true;
@@ -2684,6 +2709,14 @@ window.confirmCardPayment = async () => {
   } else {
     // 一括 → confirmedMonthを付けてプールに残す（表示のため）
     await updateDoc(doc(db, 'card_pools', c.id), { confirmedMonth: month });
+    const feeAmt = parseInt(document.getElementById('ccFeeInput').value) || 0;
+    if (feeAmt > 0) {
+      await addDoc(collection(db, 'expenses'), {
+        date: month + '-01', amount: feeAmt, categoryId: '', shop: '',
+        memo: 'カード手数料', type: 'other', payMethod: 'transfer',
+        accountId: '', breakdowns: [], noReceipt: false
+      });
+    }
   }
 
   closeModal('cardConfirmModal');
@@ -2780,8 +2813,10 @@ window.openFixedPayModal = (id) => {
   document.getElementById('fixedPayModalTitle').textContent = `${f.name} 今月分を登録`;
   document.getElementById('fp-fixedCostId').value = id;
   calcState['fp'] = String(f.actualAmount || f.amount || ''); calcUpdate('fp');
+  calcState['fpfee'] = ''; calcUpdate('fpfee');
   const ym = currentYM();
   document.getElementById('fp-date').value = f.payMethod === 'card' ? ym + '-01' : todayStr();
+  document.getElementById('fpFeeWrap').style.display = f.payMethod === 'transfer' ? 'block' : 'none';
   openModal('fixedPayModal');
 };
 
@@ -2800,6 +2835,7 @@ window.saveFixedPay = async () => {
       installType: 'once', fixedCostId: f.id, month: ym
     });
   } else if (f.payMethod === 'transfer') {
+    const feeAmt = calcGetValue('fpfee');
     await addDoc(collection(db, 'expenses'), {
       date, amount, categoryId: '', shop: '', memo: f.name,
       type: f.kind === 'work' ? 'work' : 'private',
@@ -2811,6 +2847,19 @@ window.saveFixedPay = async () => {
         accountId: f.payAccountId, txType: 'transfer_out',
         amount, date, memo: f.name, fixedCostId: f.id
       });
+    }
+    if (feeAmt > 0 && f.payAccountId) {
+      await addDoc(collection(db, 'account_txs'), {
+        accountId: f.payAccountId, txType: 'transfer_out',
+        amount: feeAmt, date, memo: `${f.name} 振込手数料`
+      });
+      await addDoc(collection(db, 'expenses'), {
+        date, amount: feeAmt, categoryId: '', shop: '',
+        memo: `${f.name} 振込手数料`,
+        type: 'other', payMethod: 'transfer', accountId: f.payAccountId,
+        breakdowns: [], noReceipt: false
+      });
+      showToast(`手数料 ¥${feeAmt.toLocaleString()} を記録しました`);
     }
   } else if (f.payMethod === 'cash') {
     await addDoc(collection(db, 'expenses'), {
@@ -2879,27 +2928,121 @@ window.saveFixed = async () => {
   const payCardId = payMethod === 'card' ? (document.getElementById('fix-payCardId').value || null) : null;
   const payAccountId = payMethod === 'transfer' ? (document.getElementById('fix-payAccountId').value || null) : null;
   const data = { name, amount, actualAmount, fixedType, kind: currentFixKind, payDay, payMethod, payCardId, payAccountId };
+
   if (editingFixedId) {
+    const oldF = fixedCosts.find(x => x.id === editingFixedId);
+    const oldPayMethod = oldF?.payMethod || null;
+    const ym = currentYM();
+    const effAmt = actualAmount || amount;
+
     await updateDoc(doc(db, 'fixed_costs', editingFixedId), data);
+
+    // 当月分の子データを取得
+    const [cpSnap, expSnap, txSnap] = await Promise.all([
+      getDocs(collection(db, 'card_pools')),
+      getDocs(collection(db, 'expenses')),
+      getDocs(collection(db, 'account_txs')),
+    ]);
+    const curCp = [];
+    cpSnap.forEach(d => {
+      const r = { id: d.id, ...d.data() };
+      if (r.fixedCostId !== editingFixedId || r.confirmedMonth) return;
+      if ((r.month === ym) || (!r.month && r.date && r.date.startsWith(ym))) curCp.push(r);
+    });
+    const curExp = [];
+    expSnap.forEach(d => {
+      const r = { id: d.id, ...d.data() };
+      if (r.fixedCostId !== editingFixedId) return;
+      if (r.date && r.date.startsWith(ym)) curExp.push(r);
+    });
+    const curTx = [];
+    txSnap.forEach(d => {
+      const r = { id: d.id, ...d.data() };
+      if (r.fixedCostId !== editingFixedId) return;
+      if (r.date && r.date.startsWith(ym)) curTx.push(r);
+    });
+
+    const batch = writeBatch(db);
+
+    if (!payMethod) {
+      // payMethodがnullになった → 当月分の子データを全削除
+      curCp.forEach(r => batch.delete(doc(db, 'card_pools', r.id)));
+      curExp.forEach(r => batch.delete(doc(db, 'expenses', r.id)));
+      curTx.forEach(r => batch.delete(doc(db, 'account_txs', r.id)));
+    } else if (oldPayMethod === payMethod) {
+      // 同じpayMethod → 差分更新
+      if (payMethod === 'card') {
+        curCp.forEach(r => batch.update(doc(db, 'card_pools', r.id), { amount: effAmt, memo: name, cardId: payCardId }));
+      } else if (payMethod === 'transfer') {
+        curExp.forEach(r => batch.update(doc(db, 'expenses', r.id), { amount: effAmt, memo: name, accountId: payAccountId }));
+        curTx.forEach(r => batch.update(doc(db, 'account_txs', r.id), { amount: effAmt, memo: name, accountId: payAccountId }));
+      } else if (payMethod === 'cash') {
+        curExp.forEach(r => batch.update(doc(db, 'expenses', r.id), { amount: effAmt, memo: name }));
+      }
+    } else {
+      // payMethod変更 → 古い当月分を削除 + 新規生成
+      curCp.forEach(r => batch.delete(doc(db, 'card_pools', r.id)));
+      curExp.forEach(r => batch.delete(doc(db, 'expenses', r.id)));
+      curTx.forEach(r => batch.delete(doc(db, 'account_txs', r.id)));
+      const date = payMethod === 'card' ? ym + '-01' : todayStr();
+      const kind = currentFixKind;
+      if (payMethod === 'card' && payCardId) {
+        batch.set(doc(collection(db, 'card_pools')), {
+          amount: effAmt, date, cardId: payCardId, memo: name,
+          installType: 'once', fixedCostId: editingFixedId, month: ym
+        });
+      } else if (payMethod === 'transfer') {
+        const expRef = doc(collection(db, 'expenses'));
+        batch.set(expRef, {
+          date, amount: effAmt, categoryId: '', shop: '', memo: name,
+          type: kind === 'work' ? 'work' : 'private',
+          payMethod: 'transfer', accountId: payAccountId,
+          breakdowns: [], noReceipt: false, fixedCostId: editingFixedId
+        });
+        if (payAccountId) {
+          batch.set(doc(collection(db, 'account_txs')), {
+            accountId: payAccountId, txType: 'transfer_out',
+            amount: effAmt, date, memo: name, fixedCostId: editingFixedId
+          });
+        }
+      } else if (payMethod === 'cash') {
+        batch.set(doc(collection(db, 'expenses')), {
+          date, amount: effAmt, categoryId: '', shop: '', memo: name,
+          type: kind === 'work' ? 'work' : 'private',
+          payMethod: 'cash', breakdowns: [], noReceipt: false, fixedCostId: editingFixedId
+        });
+      }
+    }
+
+    await batch.commit();
   } else {
     data.order = fixedCosts.length;
     await addDoc(collection(db, 'fixed_costs'), data);
   }
+
   closeModal('fixedModal');
   await loadMonthData();
 };
 
 window.deleteFixed = (id) => {
   showConfirm('この固定費を削除しますか？登録済みの当月以前の支払い記録もすべて削除されます。', async () => {
-    const [cpSnap, expSnap, txSnap] = await Promise.all([
+    const [cpSnap, expSnap, txSnap, ccSnap] = await Promise.all([
       getDocs(collection(db, 'card_pools')),
       getDocs(collection(db, 'expenses')),
       getDocs(collection(db, 'account_txs')),
+      getDocs(collection(db, 'card_confirmed')),
     ]);
+    const delPoolIds = new Set();
     const delPromises = [];
-    cpSnap.forEach(d => { if (d.data().fixedCostId === id) delPromises.push(deleteDoc(doc(db, 'card_pools', d.id))); });
+    cpSnap.forEach(d => {
+      if (d.data().fixedCostId === id) {
+        delPoolIds.add(d.id);
+        delPromises.push(deleteDoc(doc(db, 'card_pools', d.id)));
+      }
+    });
     expSnap.forEach(d => { if (d.data().fixedCostId === id) delPromises.push(deleteDoc(doc(db, 'expenses', d.id))); });
     txSnap.forEach(d => { if (d.data().fixedCostId === id) delPromises.push(deleteDoc(doc(db, 'account_txs', d.id))); });
+    ccSnap.forEach(d => { if (delPoolIds.has(d.data().poolId)) delPromises.push(deleteDoc(doc(db, 'card_confirmed', d.id))); });
     delPromises.push(deleteDoc(doc(db, 'fixed_costs', id)));
     await Promise.all(delPromises);
     await loadMonthData();
