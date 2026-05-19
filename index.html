@@ -405,9 +405,10 @@
     border-radius: 8px; padding: 10px 12px; margin-bottom: 6px;
   }
   .card-pool-item.confirmed { opacity: 0.5; }
+  .card-pool-item.confirmed .card-pool-check { opacity: 0.5; }
   .card-pool-top { display: flex; align-items: center; gap: 8px; }
   .card-pool-check { accent-color: var(--card-color); width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
-  .card-pool-info { flex: 1; }
+  .card-pool-info { flex: 1; cursor: pointer; }
   .card-pool-name { font-size: 13px; font-weight: 600; }
   .card-pool-meta { font-size: 11px; color: var(--text2); margin-top: 2px; }
   .card-pool-amount { font-size: 15px; font-weight: 700; color: var(--card-color); }
@@ -1647,7 +1648,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
-         getDocs, onSnapshot, query, where, orderBy, writeBatch }
+         getDocs, onSnapshot, query, where, orderBy, writeBatch, deleteField }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -2605,7 +2606,7 @@ function renderCardTab() {
     ...cardPools.filter(c => c.confirmedMonth).map(c => ({
       id: c.id, month: c.confirmedMonth, cardId: c.cardId, memo: c.memo,
       total: c.installType === 'installment' ? (c.installAmt||0) : (c.amount||0),
-      fromPool: true
+      date: c.date, fromPool: true
     }))
   ];
 
@@ -2635,7 +2636,7 @@ function renderCardTab() {
           return `<div class="card-pool-item" id="cp-${c.id}">
             <div class="card-pool-top">
               <input type="checkbox" class="card-pool-check" onchange="onCardPoolCheck('${c.id}', this)">
-              <div class="card-pool-info">
+              <div class="card-pool-info" onclick="openMasterFromCardItem('${c.id}', 'pool')">
                 <div class="card-pool-name">${c.memo || '（内容なし）'}${autoGenBadge}${installLabel}</div>
                 <div class="card-pool-meta">${c.date}</div>
               </div>
@@ -2646,12 +2647,22 @@ function renderCardTab() {
 
     const confirmedHtml = confirmed.length === 0
       ? '<div class="loading">今月の確定記録なし</div>'
-      : confirmed.map(c => `<div class="card-confirmed-item">
-          <div style="flex:1;">
-            <div style="font-size:13px;font-weight:600;">${c.memo || '（内容なし）'}</div>
-          </div>
-          <div style="font-size:15px;font-weight:700;color:var(--card-color);">¥${(c.total||0).toLocaleString()}</div>
-        </div>`).join('');
+      : confirmed.map(c => {
+          const isInstallment = !c.fromPool;
+          const cbAttr = isInstallment
+            ? 'disabled style="cursor:not-allowed;" title="分割払いの確定取消は未対応"'
+            : `onchange="onCardConfirmedUncheck('${c.id}', this)"`;
+          return `<div class="card-pool-item confirmed" id="cc-${c.id}">
+            <div class="card-pool-top">
+              <input type="checkbox" class="card-pool-check" checked ${cbAttr}>
+              <div class="card-pool-info" onclick="openMasterFromCardItem('${c.id}', 'confirmed')">
+                <div class="card-pool-name">${c.memo || '（内容なし）'}</div>
+                <div class="card-pool-meta">${c.date || ''}</div>
+              </div>
+              <div class="card-pool-amount">¥${(c.total||0).toLocaleString()}</div>
+            </div>
+          </div>`;
+        }).join('');
 
     const totalLabel = confirmedTotal > 0
       ? `<span style="color:var(--card-color);font-size:12px;font-weight:700;">¥${confirmedTotal.toLocaleString()}</span>`
@@ -2747,7 +2758,8 @@ window.confirmCardPayment = async () => {
         payMethod: 'transfer',
         accountId: '',
         breakdowns: [],
-        noReceipt: false
+        noReceipt: false,
+        poolId: c.id
       });
     }
   } else {
@@ -2758,7 +2770,7 @@ window.confirmCardPayment = async () => {
       await addDoc(collection(db, 'expenses'), {
         date: month + '-01', amount: feeAmt, categoryId: '', shop: '',
         memo: 'カード手数料', type: 'other', payMethod: 'transfer',
-        accountId: '', breakdowns: [], noReceipt: false
+        accountId: '', breakdowns: [], noReceipt: false, poolId: c.id
       });
     }
   }
@@ -2792,6 +2804,61 @@ window.saveBillingOverride = async () => {
   closeModal('billingOverrideModal');
   await loadMonthData();
   showToast('引き落とし日を変更しました');
+};
+
+window.openMasterFromCardItem = async (itemId, kind) => {
+  let target = null;
+  if (kind === 'pool') {
+    target = cardPools.find(p => p.id === itemId);
+  } else {
+    const cc = cardConfirmed.find(x => x.id === itemId);
+    if (cc) {
+      target = cc.poolId ? cardPools.find(p => p.id === cc.poolId) : null;
+    } else {
+      target = cardPools.find(p => p.id === itemId);
+    }
+  }
+  if (!target) { showToast('元データが見つかりません'); return; }
+
+  if (target.fixedCostId) {
+    openFixedModal(target.fixedCostId);
+    return;
+  }
+  if (target.expenseId) {
+    openExpenseModal(target.expenseId);
+    return;
+  }
+  const found = expenses.find(e =>
+    e.cardId === target.cardId &&
+    e.date === target.date &&
+    (e.amount||0) === (target.amount||0)
+  );
+  if (found) {
+    openExpenseModal(found.id);
+  } else {
+    showToast('元データが見つかりません');
+  }
+};
+
+window.onCardConfirmedUncheck = (itemId, checkbox) => {
+  checkbox.checked = true;
+  const confirmed = [...cardPools.filter(c => c.id === itemId && c.confirmedMonth)];
+  if (confirmed.length === 0) { showToast('元データが見つかりません'); return; }
+  showConfirm(
+    'この確定を取り消してプールに戻しますか？\n関連する手数料記録も削除されます',
+    async () => {
+      await updateDoc(doc(db, 'card_pools', itemId), { confirmedMonth: deleteField() });
+      const feeSnap = await getDocs(query(
+        collection(db, 'expenses'),
+        where('poolId', '==', itemId),
+        where('memo', '==', 'カード手数料')
+      ));
+      for (const d of feeSnap.docs) await deleteDoc(doc(db, 'expenses', d.id));
+      await loadMonthData();
+      showToast('プールに戻しました');
+    },
+    'プールに戻す'
+  );
 };
 
 // ===== 固定費タブ =====
@@ -3530,7 +3597,9 @@ window.saveExpense = async () => {
       if (card?.isDebit && card?.debitAccountId) {
         await addDoc(collection(db, 'account_txs'), { accountId: card.debitAccountId, txType: 'transfer_out', amount, date, memo: _debitMemo, debitExpenseId: expId });
       } else {
-        await addDoc(collection(db, 'card_pools'), { amount, date, cardId: data.cardId, memo: _expMemo, installType: 'once' });
+        const poolDocRef = await addDoc(collection(db, 'card_pools'), { amount, date, cardId: data.cardId, memo: _expMemo, installType: 'once' });
+        await updateDoc(doc(db, 'expenses', expId), { cardPoolId: poolDocRef.id });
+        await updateDoc(doc(db, 'card_pools', poolDocRef.id), { expenseId: expId });
         showToast('カードプールにも追加しました');
       }
     }
