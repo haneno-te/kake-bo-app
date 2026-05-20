@@ -1138,6 +1138,32 @@
       <label class="form-label">メモ（任意）</label>
       <input type="text" class="form-input" id="exp-memo" placeholder="内容メモ">
     </div>
+    <div class="form-row" id="expFeeWrap" style="display:none;">
+      <label class="form-label">振込手数料（円）</label>
+      <div class="calc-display">
+        <div class="calc-result zero" id="expfee-calcResult">0</div>
+        <div class="calc-expr" id="expfee-calcExpr"></div>
+      </div>
+      <div class="calc-grid">
+        <button class="calc-btn" onclick="calcPress('expfee','7')">7</button>
+        <button class="calc-btn" onclick="calcPress('expfee','8')">8</button>
+        <button class="calc-btn" onclick="calcPress('expfee','9')">9</button>
+        <button class="calc-btn op" onclick="calcPress('expfee','+')">＋</button>
+        <button class="calc-btn" onclick="calcPress('expfee','4')">4</button>
+        <button class="calc-btn" onclick="calcPress('expfee','5')">5</button>
+        <button class="calc-btn" onclick="calcPress('expfee','6')">6</button>
+        <button class="calc-btn op" onclick="calcPress('expfee','-')">－</button>
+        <button class="calc-btn" onclick="calcPress('expfee','1')">1</button>
+        <button class="calc-btn" onclick="calcPress('expfee','2')">2</button>
+        <button class="calc-btn" onclick="calcPress('expfee','3')">3</button>
+        <button class="calc-btn op" onclick="calcPress('expfee','*')">×</button>
+        <button class="calc-btn span2" onclick="calcPress('expfee','0')">0</button>
+        <button class="calc-btn" onclick="calcPress('expfee','00')">00</button>
+        <button class="calc-btn op" onclick="calcPress('expfee','/')">÷</button>
+        <button class="calc-btn span3" onclick="calcClr('expfee')">クリア</button>
+        <button class="calc-btn del" onclick="calcDel('expfee')">⌫</button>
+      </div>
+    </div>
     <div class="section-title" style="margin-top:8px;">内訳（任意）</div>
     <div id="expBreakdownList"></div>
     <button class="btn-secondary" onclick="addBreakdownRow()" style="margin-bottom:10px;">＋ 内訳を追加</button>
@@ -1610,36 +1636,6 @@
         <button class="calc-btn del" onclick="calcDel('fp')">⌫</button>
       </div>
     </div>
-    <div class="form-row">
-      <label class="form-label">日付</label>
-      <input type="date" class="form-input" id="fp-date">
-    </div>
-    <div class="form-row" id="fpFeeWrap" style="display:none;">
-      <label class="form-label">振込手数料（円）</label>
-      <div class="calc-display">
-        <div class="calc-result zero" id="fpfee-calcResult">0</div>
-        <div class="calc-expr" id="fpfee-calcExpr"></div>
-      </div>
-      <div class="calc-grid">
-        <button class="calc-btn" onclick="calcPress('fpfee','7')">7</button>
-        <button class="calc-btn" onclick="calcPress('fpfee','8')">8</button>
-        <button class="calc-btn" onclick="calcPress('fpfee','9')">9</button>
-        <button class="calc-btn op" onclick="calcPress('fpfee','+')">＋</button>
-        <button class="calc-btn" onclick="calcPress('fpfee','4')">4</button>
-        <button class="calc-btn" onclick="calcPress('fpfee','5')">5</button>
-        <button class="calc-btn" onclick="calcPress('fpfee','6')">6</button>
-        <button class="calc-btn op" onclick="calcPress('fpfee','-')">－</button>
-        <button class="calc-btn" onclick="calcPress('fpfee','1')">1</button>
-        <button class="calc-btn" onclick="calcPress('fpfee','2')">2</button>
-        <button class="calc-btn" onclick="calcPress('fpfee','3')">3</button>
-        <button class="calc-btn op" onclick="calcPress('fpfee','*')">×</button>
-        <button class="calc-btn span2" onclick="calcPress('fpfee','0')">0</button>
-        <button class="calc-btn" onclick="calcPress('fpfee','00')">00</button>
-        <button class="calc-btn op" onclick="calcPress('fpfee','/')">÷</button>
-        <button class="calc-btn span3" onclick="calcClr('fpfee')">クリア</button>
-        <button class="calc-btn del" onclick="calcDel('fpfee')">⌫</button>
-      </div>
-    </div>
     <input type="hidden" id="fp-fixedCostId">
     <button class="btn-primary" onclick="saveFixedPay()">登録</button>
     <button class="btn-secondary" onclick="closeModal('fixedPayModal')">キャンセル</button>
@@ -1710,8 +1706,8 @@ let currentFixPayMethod = null;
 let confirmCallback = null;
 
 // ===== 電卓 =====
-const calcState    = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', adj:'', initBal:'', fp:'', fpfee:'' };
-const calcOverwrite = { exp:true, inc:true, tx:true, txfee:true, fix:true, fixact:true, adj:true, initBal:true, fp:true, fpfee:true };
+const calcState    = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', adj:'', initBal:'', fp:'', fpfee:'', expfee:'' };
+const calcOverwrite = { exp:true, inc:true, tx:true, txfee:true, fix:true, fixact:true, adj:true, initBal:true, fp:true, fpfee:true, expfee:true };
 let activeCalc = '';
 
 function calcEval(expr) {
@@ -3100,6 +3096,9 @@ window.openFixedExpenseModal = (fixedCostId) => {
     document.getElementById('expenseModal').appendChild(hidden);
   }
   hidden.value = fixedCostId;
+  if (f.payMethod === 'transfer') {
+    document.getElementById('expFeeWrap').style.display = 'block';
+  }
 };
 
 window.openFixedPayModal = (id) => {
@@ -3109,64 +3108,22 @@ window.openFixedPayModal = (id) => {
   document.getElementById('fixedPayModalTitle').textContent = `${f.name} 今月分を登録`;
   document.getElementById('fp-fixedCostId').value = id;
   calcSet('fp', f.actualAmount || f.amount || '');
-  calcSet('fpfee', '');
-  const ym = currentYM();
-  document.getElementById('fp-date').value = f.payMethod === 'card' ? ym + '-01' : todayStr();
-  document.getElementById('fpFeeWrap').style.display = f.payMethod === 'transfer' ? 'block' : 'none';
   openModal('fixedPayModal');
 };
 
 window.saveFixedPay = async () => {
-  // NOTE: 振込／現金分岐は将来削除予定（固定費タブから openFixedExpenseModal 経由で
-  //       支出モーダルから記録するように変更したため）。現状はカード払いの動線として
-  //       機能している部分（payMethod === 'card'）のみ実効性がある。
   const id = document.getElementById('fp-fixedCostId').value;
   const f = fixedCosts.find(x => x.id === id);
   if (!f) return;
   const amount = calcGetValue('fp');
-  const date = document.getElementById('fp-date').value;
-  if (!amount || !date) { alert('金額と日付は必須です'); return; }
+  if (!amount) { alert('金額は必須です'); return; }
   const ym = currentYM();
+  const date = ym + '-01';
 
   if (f.payMethod === 'card') {
     await addDoc(collection(db, 'card_pools'), {
       amount, date, cardId: f.payCardId, memo: f.name,
       installType: 'once', fixedCostId: f.id, month: ym
-    });
-  } else if (f.payMethod === 'transfer') {
-    const feeAmt = calcGetValue('fpfee');
-    await addDoc(collection(db, 'expenses'), {
-      date, amount, categoryId: '', shop: '', memo: f.name,
-      type: f.kind === 'work' ? 'work' : 'private',
-      payMethod: 'transfer', accountId: f.payAccountId,
-      breakdowns: [], noReceipt: false, fixedCostId: f.id
-    });
-    if (f.payAccountId) {
-      await addDoc(collection(db, 'account_txs'), {
-        accountId: f.payAccountId, txType: 'transfer_out',
-        amount, date, memo: f.name, fixedCostId: f.id
-      });
-    }
-    if (feeAmt > 0 && f.payAccountId) {
-      await addDoc(collection(db, 'account_txs'), {
-        accountId: f.payAccountId, txType: 'transfer_out',
-        amount: feeAmt, date, memo: `${f.name} 振込手数料`,
-        fixedCostId: f.id
-      });
-      await addDoc(collection(db, 'expenses'), {
-        date, amount: feeAmt, categoryId: '', shop: '',
-        memo: `${f.name} 振込手数料`,
-        type: 'other', payMethod: 'transfer', accountId: f.payAccountId,
-        breakdowns: [], noReceipt: false,
-        fixedCostId: f.id
-      });
-      showToast(`手数料 ¥${feeAmt.toLocaleString()} を記録しました`);
-    }
-  } else if (f.payMethod === 'cash') {
-    await addDoc(collection(db, 'expenses'), {
-      date, amount, categoryId: '', shop: '', memo: f.name,
-      type: f.kind === 'work' ? 'work' : 'private',
-      payMethod: 'cash', breakdowns: [], noReceipt: false, fixedCostId: f.id
     });
   } else {
     alert('支払い方法を設定してください');
@@ -3619,6 +3576,8 @@ window.openExpenseModal = (id = null, date = null) => {
       document.getElementById('expenseModal').appendChild(_h1);
     }
     _h1.value = e.fixedCostId || '';
+    document.getElementById('expFeeWrap').style.display = 'none';
+    calcSet('expfee', '');
   } else {
     calcSet('exp', '');
     document.getElementById('exp-date').value = date || todayStr();
@@ -3639,6 +3598,8 @@ window.openExpenseModal = (id = null, date = null) => {
       document.getElementById('expenseModal').appendChild(_h2);
     }
     _h2.value = '';
+    document.getElementById('expFeeWrap').style.display = 'none';
+    calcSet('expfee', '');
   }
   openModal('expenseModal');
 };
@@ -3780,6 +3741,24 @@ window.saveExpense = async () => {
     if (currentPayMethod === 'transfer' && data.accountId) {
       await addDoc(collection(db, 'account_txs'), { accountId: data.accountId, txType: 'transfer_out', amount, date, memo: _expMemo, ...(data.fixedCostId ? { fixedCostId: data.fixedCostId } : {}) });
     }
+
+    // 振込手数料（固定費経由・新規のみ）
+    if (data.fixedCostId && currentPayMethod === 'transfer' && data.accountId) {
+      const feeAmt = calcGetValue('expfee');
+      if (feeAmt > 0) {
+        const feeMemo = `${memo} 振込手数料`;
+        await addDoc(collection(db, 'expenses'), {
+          date, amount: feeAmt, categoryId: '', shop: '', memo: feeMemo,
+          type: 'other', payMethod: 'transfer', accountId: data.accountId,
+          breakdowns: [], noReceipt: false, fixedCostId: data.fixedCostId
+        });
+        await addDoc(collection(db, 'account_txs'), {
+          accountId: data.accountId, txType: 'transfer_out',
+          amount: feeAmt, date, memo: feeMemo, fixedCostId: data.fixedCostId
+        });
+        showToast(`手数料 ¥${feeAmt.toLocaleString()} を記録しました`);
+      }
+    }
   }
 
   // テンプレ登録
@@ -3828,6 +3807,19 @@ window.deleteExpense = (id) => {
       for (const t of linked) {
         await deleteDoc(doc(db, 'account_txs', t.id));
       }
+    }
+    if (expense?.fixedCostId && !(expense.memo || '').includes('振込手数料')) {
+      const feeExps = expenses.filter(e =>
+        e.id !== id &&
+        e.fixedCostId === expense.fixedCostId &&
+        (e.memo || '').includes('振込手数料')
+      );
+      for (const fe of feeExps) await deleteDoc(doc(db, 'expenses', fe.id));
+      const feeTxs = accountTxs.filter(t =>
+        t.fixedCostId === expense.fixedCostId &&
+        (t.memo || '').includes('振込手数料')
+      );
+      for (const ft of feeTxs) await deleteDoc(doc(db, 'account_txs', ft.id));
     }
     await loadMonthData();
   });
