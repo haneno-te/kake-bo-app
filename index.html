@@ -4692,6 +4692,50 @@ window.runHealthCheck = async () => {
     }
   });
 
+  // ⑧ 振込手数料 account_txs → 対応 expense なし
+  const orphanFeeTransferTxs = txArr.filter(t => {
+    if (!(t.memo || '').includes('振込手数料') || !t.fixedCostId) return false;
+    return !expArr.some(e =>
+      e.fixedCostId === t.fixedCostId &&
+      (e.memo || '').includes('振込手数料') &&
+      e.date === t.date &&
+      (e.amount || 0) === (t.amount || 0)
+    );
+  }).map(t => ({ ...t, reason: `fixedCostId="${t.fixedCostId}" に対応する振込手数料 expense がありません` }));
+
+  // ⑨ 振込手数料 expense → 対応 account_txs なし
+  const orphanFeeTransferExps = expArr.filter(e => {
+    if (!(e.memo || '').includes('振込手数料') || !e.fixedCostId) return false;
+    return !txArr.some(t =>
+      t.fixedCostId === e.fixedCostId &&
+      (t.memo || '').includes('振込手数料') &&
+      t.date === e.date &&
+      (t.amount || 0) === (e.amount || 0)
+    );
+  }).map(e => ({ ...e, reason: `fixedCostId="${e.fixedCostId}" に対応する振込手数料 account_txs がありません` }));
+
+  // ⑩ 手数料 account_txs → 対応 expense なし
+  const orphanFeeBankTxs = txArr.filter(t => {
+    if (t.memo !== '手数料' || t.fixedCostId || t.incomeId) return false;
+    return !expArr.some(e =>
+      e.memo === '銀行手数料' &&
+      e.accountId === t.accountId &&
+      e.date === t.date &&
+      (e.amount || 0) === (t.amount || 0)
+    );
+  }).map(t => ({ ...t, reason: `対応する銀行手数料 expense がありません（accountId=${t.accountId} date=${t.date}）` }));
+
+  // ⑪ 銀行手数料 expense → 対応 account_txs なし
+  const orphanFeeBankExps = expArr.filter(e => {
+    if (e.memo !== '銀行手数料') return false;
+    return !txArr.some(t =>
+      t.memo === '手数料' &&
+      t.accountId === e.accountId &&
+      t.date === e.date &&
+      (t.amount || 0) === (e.amount || 0)
+    );
+  }).map(e => ({ ...e, reason: `対応する手数料 account_txs がありません（accountId=${e.accountId} date=${e.date}）` }));
+
   const short = id => (id || '').substring(0, 8);
   const fmtAmt = n => (n ?? 0).toLocaleString() + '円';
 
@@ -4707,7 +4751,7 @@ window.runHealthCheck = async () => {
     return `<div class="card" style="margin-top:10px;"><div class="card-title">${label} 詳細</div>${rows}</div>`;
   };
 
-  const total = orphanPools.length + orphanConfirmed.length + mismatchPools.length + orphanTxs.length + orphanExpCard.length + orphanDebitExp.length + orphanDebitTxs.length;
+  const total = orphanPools.length + orphanConfirmed.length + mismatchPools.length + orphanTxs.length + orphanExpCard.length + orphanDebitExp.length + orphanDebitTxs.length + orphanFeeTransferTxs.length + orphanFeeTransferExps.length + orphanFeeBankTxs.length + orphanFeeBankExps.length;
   const summaryColor = total === 0 ? 'var(--good,#4caf50)' : 'var(--bad)';
   const summaryText = total === 0 ? '✅ データは健全です' : `⚠️ ${total}件の確認すべきデータがあります`;
 
@@ -4727,6 +4771,10 @@ window.runHealthCheck = async () => {
       ${statRow('⑤ カード支出：未払いプールなし', orphanExpCard.length, 'カード払いの支出だが、未払いプール記録が見当たりません')}
       ${statRow('⑥ デビット支出：口座記録なし', orphanDebitExp.length, 'デビットカード支出に対応する口座引き落とし記録がありません')}
       ${statRow('⑦ 口座記録：元のデビット支出なし', orphanDebitTxs.length, 'debitExpenseIdが付いた口座記録だが、元の支出が見つかりません')}
+      ${statRow('⑧ 振込手数料 口座記録：対応支出なし', orphanFeeTransferTxs.length, '振込手数料の口座記録に対応する支出が見当たりません')}
+      ${statRow('⑨ 振込手数料 支出：対応口座記録なし', orphanFeeTransferExps.length, '振込手数料の支出に対応する口座記録が見当たりません')}
+      ${statRow('⑩ 手数料 口座記録：対応支出なし', orphanFeeBankTxs.length, '銀行手数料の口座記録に対応する支出が見当たりません')}
+      ${statRow('⑪ 銀行手数料 支出：対応口座記録なし', orphanFeeBankExps.length, '銀行手数料の支出に対応する口座記録が見当たりません')}
     </div>`;
 
   const detail1 = makeDetail('① 未払いプール：元データなし', 'card_pools', orphanPools, [
@@ -4750,15 +4798,29 @@ window.runHealthCheck = async () => {
   const detail7 = makeDetail('⑦ 口座記録：元のデビット支出なし', 'account_txs', orphanDebitTxs, [
     { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }
   ]);
+  const detail8 = makeDetail('⑧ 振込手数料 口座記録：対応支出なし', 'account_txs', orphanFeeTransferTxs, [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'fixedCostId', key: 'fixedCostId' }
+  ]);
+  const detail9 = makeDetail('⑨ 振込手数料 支出：対応口座記録なし', 'expenses', orphanFeeTransferExps, [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'fixedCostId', key: 'fixedCostId' }
+  ]);
+  const detail10 = makeDetail('⑩ 手数料 口座記録：対応支出なし', 'account_txs', orphanFeeBankTxs, [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'accountId', key: 'accountId' }
+  ]);
+  const detail11 = makeDetail('⑪ 銀行手数料 支出：対応口座記録なし', 'expenses', orphanFeeBankExps, [
+    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'accountId', key: 'accountId' }
+  ]);
 
-  resultEl.innerHTML = summary + detail1 + detail2 + detail3 + detail4 + detail5 + detail6 + detail7;
+  resultEl.innerHTML = summary + detail1 + detail2 + detail3 + detail4 + detail5 + detail6 + detail7 + detail8 + detail9 + detail10 + detail11;
 
-  // 削除対象を集約（④ account_txs は除外）
+  // 削除対象を集約（④⑧⑩ account_txs は除外）
   _healthCheckIssues = [
     ...orphanPools.map(r => ({ col: 'card_pools', id: r.id, reason: '①孤立: ' + r.reason })),
     ...orphanConfirmed.map(r => ({ col: 'card_confirmed', id: r.id, reason: '②孤立: ' + r.reason })),
     ...mismatchPools.map(r => ({ col: 'card_pools', id: r.id, reason: '③乖離: ' + r.reason })),
     ...orphanExpCard.map(r => ({ col: 'expenses', id: r.id, reason: '⑤孤立: ' + r.reason })),
+    ...orphanFeeTransferExps.map(r => ({ col: 'expenses', id: r.id, reason: '⑨孤立: ' + r.reason })),
+    ...orphanFeeBankExps.map(r => ({ col: 'expenses', id: r.id, reason: '⑪孤立: ' + r.reason })),
   ];
   const deleteCount = _healthCheckIssues.length;
   const wrap = document.getElementById('healthDeleteWrap');
