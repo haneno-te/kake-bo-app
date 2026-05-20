@@ -2017,6 +2017,36 @@ function populateBadCategorySel(sel) {
   settings.badCategories.forEach(c => { sel.innerHTML += `<option value="${c.name}">${c.name}</option>`; });
 }
 
+// ===== カード未払い共通計算 =====
+function calcPoolUnpaid(pool) {
+  if (pool.confirmedMonth) return 0;
+  return pool.installType === 'installment'
+    ? (pool.installAmt || 0) * (pool.remainCount != null ? pool.remainCount : (pool.installCount || 0))
+    : (pool.amount || 0);
+}
+
+function calcCardUnpaidTotal(cardId) {
+  return cardPools
+    .filter(p => p.cardId === cardId && !p.confirmedMonth)
+    .reduce((s, p) => s + calcPoolUnpaid(p), 0);
+}
+
+function calcCardMonthlySettled(cardId, ym) {
+  const fromPools = cardPools
+    .filter(p => p.cardId === cardId && p.confirmedMonth === ym)
+    .reduce((s, p) => s + (p.installType === 'installment' ? (p.installAmt||0) : (p.amount||0)), 0);
+  const fromConfirmed = cardConfirmed
+    .filter(c => c.cardId === cardId && c.month === ym)
+    .reduce((s, c) => s + (c.total||0), 0);
+  return fromPools + fromConfirmed;
+}
+
+function calcAllCardsUnpaidTotal() {
+  return cardPools
+    .filter(p => !p.confirmedMonth)
+    .reduce((s, p) => s + calcPoolUnpaid(p), 0);
+}
+
 // ===== 月次データ読み込み =====
 async function loadMonthData() {
   const ym = currentYM();
@@ -2637,9 +2667,28 @@ function renderCardTab() {
           </div>`;
         }).join('');
 
-    const totalLabel = confirmedTotal > 0
-      ? `<span style="color:var(--card-color);font-size:12px;font-weight:700;">¥${confirmedTotal.toLocaleString()}</span>`
-      : '';
+    const unpaidAmt = calcCardUnpaidTotal(card.id);
+    const settledAmt = calcCardMonthlySettled(card.id, ym);
+    const carryAmt = unpaidAmt - settledAmt;
+    const totalLabel = `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+      <span style="color:${unpaidAmt > 0 ? 'var(--bad)' : 'var(--text2)'};font-size:13px;font-weight:700;">未払い ¥${unpaidAmt.toLocaleString()}</span>
+      <span style="color:var(--text2);font-size:10px;">今月引き落とし ¥${settledAmt.toLocaleString()}</span>
+    </div>`;
+    const summarySectionHtml = `<div style="background:var(--bad-bg);border:1px solid var(--bad);border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
+        <span style="color:var(--text2);">未払い総額</span>
+        <span style="color:var(--text);">¥${unpaidAmt.toLocaleString()}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;">
+        <span style="color:var(--text2);">今月（${currentMonth}月）支払予定</span>
+        <span style="color:var(--text);">¥${settledAmt.toLocaleString()}</span>
+      </div>
+      <div style="border-top:1px solid var(--bad);margin-bottom:6px;"></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;">
+        <span style="color:var(--bad);font-weight:700;">差引繰越</span>
+        <span style="color:var(--bad);font-weight:700;">¥${carryAmt.toLocaleString()}</span>
+      </div>
+    </div>`;
 
     return `<div class="accordion-section" data-card-id="${card.id}">
       <div class="accordion-header" onclick="toggleAccordion(this)">
@@ -2647,6 +2696,7 @@ function renderCardTab() {
         <div style="display:flex;align-items:center;gap:8px;">${totalLabel}<span class="accordion-arrow">▼</span></div>
       </div>
       <div class="accordion-body" style="display:none;">
+        ${summarySectionHtml}
         <div class="section-title">未払いプール</div>
         ${poolHtml}
         <div class="section-title" style="margin-top:10px;">引き落とし確定済み</div>
@@ -3358,18 +3408,14 @@ function renderSummary() {
   }
 
   // ===== 未払い残高集計 =====
-  const calcUnpaid = c => c.installType === 'installment'
-    ? (c.installAmt || 0) * (c.remainCount != null ? c.remainCount : (c.installCount || 0))
-    : (c.amount || 0);
-
   const unpaidAll = cardPools.filter(c => !c.confirmedMonth);
-  const unpaidTotal = unpaidAll.reduce((s, c) => s + calcUnpaid(c), 0);
+  const unpaidTotal = calcAllCardsUnpaidTotal();
 
   const unpaidNew = unpaidAll.filter(c => c.date >= ymStart && c.date < nextM);
-  const unpaidNewAmt = unpaidNew.reduce((s, c) => s + calcUnpaid(c), 0);
+  const unpaidNewAmt = unpaidNew.reduce((s, c) => s + calcPoolUnpaid(c), 0);
 
   const unpaidCarry = unpaidAll.filter(c => c.date < ymStart);
-  const unpaidCarryAmt = unpaidCarry.reduce((s, c) => s + calcUnpaid(c), 0);
+  const unpaidCarryAmt = unpaidCarry.reduce((s, c) => s + calcPoolUnpaid(c), 0);
 
   const settledFromPools = cardPools.filter(c => c.confirmedMonth === ym);
   const settledFromPoolsAmt = settledFromPools.reduce((s, c) =>
@@ -3391,7 +3437,7 @@ function renderSummary() {
 
   const getCardName = c => settings.cards.find(card => card.id === c.cardId)?.name || 'カード不明';
   const unpaidItemRow = c => {
-    const amt = calcUnpaid(c);
+    const amt = calcPoolUnpaid(c);
     return `<div style="padding:6px 8px 6px 14px;border-top:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="goToCardAccordion('${c.cardId}')"><div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${c.memo || '（内容なし）'}</div><div style="font-size:10px;color:var(--text2);">${getCardName(c)} | ${c.date}</div></div><span style="font-size:13px;font-weight:700;color:var(--bad);margin-left:8px;flex-shrink:0;">¥${amt.toLocaleString()}</span></div>`;
   };
   const settledPoolRow = c => {
