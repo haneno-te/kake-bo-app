@@ -1437,7 +1437,7 @@
       </div>
     </div>
     <div class="form-row">
-      <label class="form-label">支払い日（任意）</label>
+      <label class="form-label">メモ：支払い目安日（任意・カレンダー表示には使われません）</label>
       <input type="text" class="form-input" id="fix-payDay" placeholder="1〜31" inputmode="numeric">
     </div>
     <div class="form-row">
@@ -2124,7 +2124,6 @@ function renderCalendar() {
     let dots = '';
     if (hasBad) dots += `<span class="cal-dot" style="background:var(--bad);"></span>`;
     if (hasAccTx) dots += `<span class="cal-dot" style="background:var(--accent);"></span>`;
-    if (fixedCosts.some(f => f.payDay === d)) dots += `<span class="cal-dot" style="background:var(--expense);"></span>`;
     if (settings.cards.some(c => getEffectiveBillingDay(c) === d)) dots += `<span class="cal-dot" style="background:var(--card-color);"></span>`;
 
     html += `<div class="${cls}" onclick="selectDate('${dateStr}')">
@@ -2182,48 +2181,9 @@ function renderDayPanel(dateStr) {
   const dayExp = expenses.filter(e => e.date === dateStr);
   const dayInc = incomes.filter(e => e.date === dateStr);
   const dayTxs = accountTxs.filter(t => t.date === dateStr);
-  const dayFixed = fixedCosts.filter(f => f.payDay === dayNum);
   const dayBillingCards = settings.cards.filter(c => getEffectiveBillingDay(c) === dayNum);
 
   let html = '';
-
-  // ① 固定費 payDay（デイパネル先頭）
-  dayFixed.forEach(f => {
-    const amount = f.actualAmount || f.amount || 0;
-    const ym = currentYM();
-    const ymStart = ym + '-01';
-    const nextM = currentMonth === 12
-      ? (currentYear+1) + '-01-01'
-      : currentYear + '-' + String(currentMonth+1).padStart(2,'0') + '-01';
-    let isRegistered = false;
-    if (f.payMethod === 'card') {
-      isRegistered = cardPools.some(p => p.fixedCostId === f.id && p.month === ym);
-    } else if (f.payMethod === 'transfer' || f.payMethod === 'cash') {
-      isRegistered = expenses.some(e => e.fixedCostId === f.id && e.date >= ymStart && e.date < nextM);
-    }
-    const label = isRegistered
-      ? '<div style="font-size:10px;color:var(--income);font-weight:700;margin-bottom:4px;">✅ 支払い済み</div>'
-      : (isFuture
-        ? '<div style="font-size:10px;color:var(--expense);font-weight:700;margin-bottom:4px;">📌 支払い予定</div>'
-        : '');
-    const cardCard = f.payMethod === 'card' ? (() => {
-      const cardName = settings.cards.find(c => c.id === f.payCardId)?.name || 'カード';
-      return `<div style="font-size:11px;color:var(--card-color);margin-top:4px;cursor:pointer;" onclick="goToCardAccordion('${f.payCardId}')">💳 ${cardName}の引き落としに含まれる</div>`;
-    })() : '';
-    html += `<div class="record-item" style="border-color:var(--expense);">
-      ${label}
-      <div class="record-top">
-        <div class="record-left">
-          <div class="record-category">固定費</div>
-          <div class="record-memo">${f.name}</div>
-          ${cardCard}
-        </div>
-        <div class="record-right">
-          <div class="record-amount">¥${amount.toLocaleString()}</div>
-        </div>
-      </div>
-    </div>`;
-  });
 
   // ② カード billingDay（デイパネル先頭）
   const ym = currentYM();
@@ -2257,7 +2217,7 @@ function renderDayPanel(dateStr) {
   });
 
   if (dayExp.length === 0 && dayInc.length === 0 && dayTxs.length === 0
-      && dayFixed.length === 0 && dayBillingCards.length === 0) {
+      && dayBillingCards.length === 0) {
     html = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:12px;">記録なし</div>';
   }
 
@@ -2905,14 +2865,20 @@ function renderFixedTab() {
     } else if (f.payMethod === 'transfer' || f.payMethod === 'cash') {
       isRegistered = expenses.some(e => e.fixedCostId === f.id && e.date >= ymStart && e.date < nextM);
     }
-    const registerCell = f.payMethod
-      ? (isRegistered
-          ? `<label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--income);flex-shrink:0;cursor:pointer;">
-               <input type="checkbox" checked style="accent-color:var(--income);width:14px;height:14px;" onchange="unregisterFixed('${f.id}',this)">
-               登録済み
-             </label>`
-          : `<button class="btn-sm accent" onclick="openFixedPayModal('${f.id}')" style="flex-shrink:0;">📥 今月分を登録</button>`)
-      : '';
+    let registerCell = '';
+    const registeredLabel = `<label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--income);flex-shrink:0;cursor:pointer;">
+  <input type="checkbox" checked style="accent-color:var(--income);width:14px;height:14px;" onchange="unregisterFixed('${f.id}',this)">
+  登録済み
+</label>`;
+    if (f.payMethod === 'card') {
+      registerCell = isRegistered
+        ? registeredLabel
+        : `<button class="btn-sm accent" onclick="openFixedPayModal('${f.id}')" style="flex-shrink:0;">📥 今月分を登録</button>`;
+    } else if (f.payMethod === 'transfer' || f.payMethod === 'cash') {
+      registerCell = isRegistered
+        ? registeredLabel
+        : `<button class="btn-sm accent" onclick="openFixedExpenseModal('${f.id}')" style="flex-shrink:0;">📝 支払いを記録</button>`;
+    }
 
     return `<div class="fixed-item">
       <div style="display:flex;flex-direction:column;gap:2px;margin-right:6px;">
@@ -2963,6 +2929,34 @@ window.unregisterFixed = (id, checkbox) => {
   }, '取り消す');
 };
 
+window.openFixedExpenseModal = (fixedCostId) => {
+  const f = fixedCosts.find(x => x.id === fixedCostId);
+  if (!f) return;
+  if (f.payMethod !== 'transfer' && f.payMethod !== 'cash') {
+    alert('この固定費は振込／現金払いではありません');
+    return;
+  }
+  openExpenseModal(null);
+  // プリフィル
+  calcSet('exp', f.actualAmount || f.amount || '');
+  document.getElementById('exp-date').value = todayStr();
+  setPayMethod(f.payMethod);
+  if (f.payMethod === 'transfer' && f.payAccountId) {
+    document.getElementById('exp-accountId').value = f.payAccountId;
+  }
+  document.getElementById('exp-memo').value = f.name;
+  setExpType(f.kind === 'work' ? 'work' : 'private');
+  // fixedCostId を hidden で保持
+  let hidden = document.getElementById('exp-fixedCostId');
+  if (!hidden) {
+    hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.id = 'exp-fixedCostId';
+    document.getElementById('expenseModal').appendChild(hidden);
+  }
+  hidden.value = fixedCostId;
+};
+
 window.openFixedPayModal = (id) => {
   const f = fixedCosts.find(x => x.id === id);
   if (!f) return;
@@ -2978,6 +2972,9 @@ window.openFixedPayModal = (id) => {
 };
 
 window.saveFixedPay = async () => {
+  // NOTE: 振込／現金分岐は将来削除予定（固定費タブから openFixedExpenseModal 経由で
+  //       支出モーダルから記録するように変更したため）。現状はカード払いの動線として
+  //       機能している部分（payMethod === 'card'）のみ実効性がある。
   const id = document.getElementById('fp-fixedCostId').value;
   const f = fixedCosts.find(x => x.id === id);
   if (!f) return;
@@ -3473,6 +3470,14 @@ window.openExpenseModal = (id = null, date = null) => {
     const bList = document.getElementById('expBreakdownList');
     bList.innerHTML = '';
     (e.breakdowns||[]).forEach(b => appendBreakdownRow(b));
+    let _h1 = document.getElementById('exp-fixedCostId');
+    if (!_h1) {
+      _h1 = document.createElement('input');
+      _h1.type = 'hidden';
+      _h1.id = 'exp-fixedCostId';
+      document.getElementById('expenseModal').appendChild(_h1);
+    }
+    _h1.value = e.fixedCostId || '';
   } else {
     calcSet('exp', '');
     document.getElementById('exp-date').value = date || todayStr();
@@ -3485,6 +3490,14 @@ window.openExpenseModal = (id = null, date = null) => {
     setPayMethod('cash');
     setExpType('private');
     document.getElementById('exp-noReceipt').checked = false;
+    let _h2 = document.getElementById('exp-fixedCostId');
+    if (!_h2) {
+      _h2 = document.createElement('input');
+      _h2.type = 'hidden';
+      _h2.id = 'exp-fixedCostId';
+      document.getElementById('expenseModal').appendChild(_h2);
+    }
+    _h2.value = '';
   }
   openModal('expenseModal');
 };
@@ -3523,6 +3536,9 @@ window.saveExpense = async () => {
   };
   if (currentPayMethod === 'card') data.cardId = document.getElementById('exp-cardId').value;
   if (currentPayMethod === 'transfer') data.accountId = document.getElementById('exp-accountId').value;
+
+  const _hiddenFixedCostId = document.getElementById('exp-fixedCostId')?.value || '';
+  if (_hiddenFixedCostId) data.fixedCostId = _hiddenFixedCostId;
 
   const _expMemo = memo || shop || '（支出タブから）';
   const _debitMemo = memo || shop || '（デビット決済）';
