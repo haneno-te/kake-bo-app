@@ -2190,9 +2190,22 @@ function renderDayPanel(dateStr) {
   // ① 固定費 payDay（デイパネル先頭）
   dayFixed.forEach(f => {
     const amount = f.actualAmount || f.amount || 0;
-    const label = isFuture
-      ? '<div style="font-size:10px;color:var(--expense);font-weight:700;margin-bottom:4px;">📌 支払い予定</div>'
-      : '';
+    const ym = currentYM();
+    const ymStart = ym + '-01';
+    const nextM = currentMonth === 12
+      ? (currentYear+1) + '-01-01'
+      : currentYear + '-' + String(currentMonth+1).padStart(2,'0') + '-01';
+    let isRegistered = false;
+    if (f.payMethod === 'card') {
+      isRegistered = cardPools.some(p => p.fixedCostId === f.id && p.month === ym);
+    } else if (f.payMethod === 'transfer' || f.payMethod === 'cash') {
+      isRegistered = expenses.some(e => e.fixedCostId === f.id && e.date >= ymStart && e.date < nextM);
+    }
+    const label = isRegistered
+      ? '<div style="font-size:10px;color:var(--income);font-weight:700;margin-bottom:4px;">✅ 支払い済み</div>'
+      : (isFuture
+        ? '<div style="font-size:10px;color:var(--expense);font-weight:700;margin-bottom:4px;">📌 支払い予定</div>'
+        : '');
     const cardCard = f.payMethod === 'card' ? (() => {
       const cardName = settings.cards.find(c => c.id === f.payCardId)?.name || 'カード';
       return `<div style="font-size:11px;color:var(--card-color);margin-top:4px;cursor:pointer;" onclick="goToCardAccordion('${f.payCardId}')">💳 ${cardName}の引き落としに含まれる</div>`;
@@ -2995,13 +3008,15 @@ window.saveFixedPay = async () => {
     if (feeAmt > 0 && f.payAccountId) {
       await addDoc(collection(db, 'account_txs'), {
         accountId: f.payAccountId, txType: 'transfer_out',
-        amount: feeAmt, date, memo: `${f.name} 振込手数料`
+        amount: feeAmt, date, memo: `${f.name} 振込手数料`,
+        fixedCostId: f.id
       });
       await addDoc(collection(db, 'expenses'), {
         date, amount: feeAmt, categoryId: '', shop: '',
         memo: `${f.name} 振込手数料`,
         type: 'other', payMethod: 'transfer', accountId: f.payAccountId,
-        breakdowns: [], noReceipt: false
+        breakdowns: [], noReceipt: false,
+        fixedCostId: f.id
       });
       showToast(`手数料 ¥${feeAmt.toLocaleString()} を記録しました`);
     }
