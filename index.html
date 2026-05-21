@@ -4001,6 +4001,7 @@ window.openAccountTxModal = (id = null, date = null, accountId = null, txType = 
       document.getElementById('tx-accountId').value = t.accountId || '';
       if (t.toAccountId) document.getElementById('tx-toAccountId').value = t.toAccountId;
       setTxType(t.txType || 'deposit');
+      document.getElementById('txFeeWrap').style.display = 'none';
     }
   } else {
     document.getElementById('tx-date').value = date || todayStr();
@@ -4025,29 +4026,62 @@ window.saveAccountTx = async () => {
   const data = { accountId, txType: currentTxType, amount, date, memo };
   if (currentTxType === 'move') data.toAccountId = toAccountId;
   if (editingAccountTxId) {
+    const oldTx = accountTxs.find(x => x.id === editingAccountTxId);
+    const oldType = oldTx?.txType;
+    const oldHasFeeType = ['transfer_out', 'withdraw', 'move'].includes(oldType);
+    const newHasFeeType = ['transfer_out', 'withdraw', 'move'].includes(currentTxType);
     await updateDoc(doc(db, 'account_txs', editingAccountTxId), data);
+    // 引き下ろし連動
+    if (oldType === 'withdraw' && currentTxType === 'withdraw') {
+      const snap = await getDocs(query(collection(db, 'account_txs'), where('withdrawTxId', '==', editingAccountTxId)));
+      for (const d of snap.docs) await updateDoc(d.ref, { amount, date });
+    } else if (oldType === 'withdraw' && currentTxType !== 'withdraw') {
+      const snap = await getDocs(query(collection(db, 'account_txs'), where('withdrawTxId', '==', editingAccountTxId)));
+      for (const d of snap.docs) await deleteDoc(d.ref);
+    } else if (oldType !== 'withdraw' && currentTxType === 'withdraw') {
+      const cashAcc = settings.accounts.find(a => a.name === '現金');
+      if (cashAcc) {
+        await addDoc(collection(db, 'account_txs'), {
+          accountId: cashAcc.id, txType: 'deposit', amount, date,
+          memo: '引き下ろし（自動）', withdrawTxId: editingAccountTxId
+        });
+        showToast('現金口座に自動反映しました');
+      }
+    }
+    // 手数料連動
+    if (oldHasFeeType && !newHasFeeType) {
+      // 手数料なしタイプへ変更：紐づく手数料記録を削除
+      const feeTxSnap = await getDocs(query(collection(db, 'account_txs'), where('parentTxId', '==', editingAccountTxId)));
+      for (const d of feeTxSnap.docs) await deleteDoc(d.ref);
+      const feeExpSnap = await getDocs(query(collection(db, 'expenses'), where('parentTxId', '==', editingAccountTxId)));
+      for (const d of feeExpSnap.docs) await deleteDoc(d.ref);
+    } else if (oldHasFeeType && newHasFeeType && oldTx?.date !== date) {
+      // 日付変更時に手数料の日付を連動
+      const feeTxSnap = await getDocs(query(collection(db, 'account_txs'), where('parentTxId', '==', editingAccountTxId)));
+      for (const d of feeTxSnap.docs) await updateDoc(d.ref, { date });
+      const feeExpSnap = await getDocs(query(collection(db, 'expenses'), where('parentTxId', '==', editingAccountTxId)));
+      for (const d of feeExpSnap.docs) await updateDoc(d.ref, { date });
+    }
   } else {
-    await addDoc(collection(db, 'account_txs'), data);
+    const docRef = await addDoc(collection(db, 'account_txs'), data);
+    const parentId = docRef.id;
     if (currentTxType === 'withdraw') {
       const cashAcc = settings.accounts.find(a => a.name === '現金');
       if (cashAcc) {
         await addDoc(collection(db, 'account_txs'), {
-          accountId: cashAcc.id,
-          txType: 'deposit',
-          amount,
-          date,
-          memo: '引き下ろし（自動）'
+          accountId: cashAcc.id, txType: 'deposit', amount, date,
+          memo: '引き下ろし（自動）', withdrawTxId: parentId
         });
         showToast('現金口座に自動反映しました');
       }
     }
     if (feeAmt > 0 && (currentTxType === 'transfer_out' || currentTxType === 'withdraw' || currentTxType === 'move')) {
       await addDoc(collection(db, 'account_txs'), {
-        accountId, txType: 'transfer_out', amount: feeAmt, date, memo: '手数料'
+        accountId, txType: 'transfer_out', amount: feeAmt, date, memo: '手数料', parentTxId: parentId
       });
       await addDoc(collection(db, 'expenses'), {
         date, amount: feeAmt, categoryId: '', shop: '', memo: '銀行手数料',
-        type: 'other', payMethod: 'transfer', accountId, breakdowns: [], noReceipt: false
+        type: 'other', payMethod: 'transfer', accountId, breakdowns: [], noReceipt: false, parentTxId: parentId
       });
       showToast(`手数料 ¥${feeAmt.toLocaleString()} を記録しました`);
     }
@@ -4057,7 +4091,29 @@ window.saveAccountTx = async () => {
 };
 
 window.deleteAccountTx = (id) => {
-  showConfirm('この口座記録を削除しますか？', async () => {
+  const t = accountTxs.find(x => x.id === id);
+  const isWithdraw = t?.txType === 'withdraw';
+  const hasFeeTypes = ['transfer_out', 'withdraw', 'move'].includes(t?.txType);
+  const hasLinkedFees = hasFeeTypes && accountTxs.some(tx => tx.parentTxId === id);
+
+  let msg = 'この口座記録を削除しますか？';
+  if (isWithdraw) {
+    msg = 'この引き下ろし記録を削除しますか？連動する現金口座への入金記録も一緒に削除されます。';
+  } else if (hasLinkedFees) {
+    msg = 'この記録を削除しますか？連動する手数料記録も一緒に削除されます。';
+  }
+
+  showConfirm(msg, async () => {
+    if (isWithdraw) {
+      const snap = await getDocs(query(collection(db, 'account_txs'), where('withdrawTxId', '==', id)));
+      for (const d of snap.docs) await deleteDoc(d.ref);
+    }
+    if (hasFeeTypes) {
+      const feeTxSnap = await getDocs(query(collection(db, 'account_txs'), where('parentTxId', '==', id)));
+      for (const d of feeTxSnap.docs) await deleteDoc(d.ref);
+      const feeExpSnap = await getDocs(query(collection(db, 'expenses'), where('parentTxId', '==', id)));
+      for (const d of feeExpSnap.docs) await deleteDoc(d.ref);
+    }
     await deleteDoc(doc(db, 'account_txs', id));
     await loadMonthData();
   });
