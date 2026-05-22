@@ -4105,12 +4105,19 @@ window.saveAccountTx = async () => {
       for (const d of feeTxSnap.docs) await deleteDoc(d.ref);
       const feeExpSnap = await getDocs(query(collection(db, 'expenses'), where('parentTxId', '==', editingAccountTxId)));
       for (const d of feeExpSnap.docs) await deleteDoc(d.ref);
-    } else if (oldHasFeeType && newHasFeeType && oldTx?.date !== date) {
-      // 日付変更時に手数料の日付を連動
-      const feeTxSnap = await getDocs(query(collection(db, 'account_txs'), where('parentTxId', '==', editingAccountTxId)));
-      for (const d of feeTxSnap.docs) await updateDoc(d.ref, { date });
-      const feeExpSnap = await getDocs(query(collection(db, 'expenses'), where('parentTxId', '==', editingAccountTxId)));
-      for (const d of feeExpSnap.docs) await updateDoc(d.ref, { date });
+    } else if (oldHasFeeType && newHasFeeType) {
+      // accountId または date が変更された場合、手数料も連動更新
+      const accountChanged = oldTx?.accountId !== accountId;
+      const dateChanged = oldTx?.date !== date;
+      if (accountChanged || dateChanged) {
+        const updateFields = {};
+        if (accountChanged) updateFields.accountId = accountId;
+        if (dateChanged) updateFields.date = date;
+        const feeTxSnap = await getDocs(query(collection(db, 'account_txs'), where('parentTxId', '==', editingAccountTxId)));
+        for (const d of feeTxSnap.docs) await updateDoc(d.ref, updateFields);
+        const feeExpSnap = await getDocs(query(collection(db, 'expenses'), where('parentTxId', '==', editingAccountTxId)));
+        for (const d of feeExpSnap.docs) await updateDoc(d.ref, updateFields);
+      }
     }
   } else {
     const docRef = await addDoc(collection(db, 'account_txs'), data);
