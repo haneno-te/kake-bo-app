@@ -4087,6 +4087,33 @@ window.saveAccountTx = async () => {
 
 window.deleteAccountTx = (id) => {
   const t = accountTxs.find(x => x.id === id);
+
+  // 紐付けキーを持つ自動生成 tx は直接削除不可
+  if (t?.incomeId) {
+    alert('この記録は収入から自動生成されたものです。収入タブで親データを削除してください。');
+    return;
+  }
+  if (t?.debitExpenseId) {
+    alert('この記録はデビットカード支出から自動生成されたものです。支出タブで親データを削除してください。');
+    return;
+  }
+  if (t?.expenseId) {
+    alert('この記録は振込支出から自動生成されたものです。支出タブで親データを削除してください。');
+    return;
+  }
+  if (t?.fixedCostId) {
+    alert('この記録は固定費から自動生成されたものです。固定費タブで親データを削除してください。');
+    return;
+  }
+  if (t?.withdrawTxId) {
+    alert('この記録は引き下ろしに連動した自動入金です。元の引き下ろし記録を削除してください。');
+    return;
+  }
+  if (t?.parentTxId) {
+    alert('この記録は手数料です。元の取引（振込・引き下ろし・移動）を削除すると一緒に消えます。');
+    return;
+  }
+
   const isWithdraw = t?.txType === 'withdraw';
   const hasFeeTypes = ['transfer_out', 'withdraw', 'move'].includes(t?.txType);
   const hasLinkedFees = hasFeeTypes && accountTxs.some(tx => tx.parentTxId === id);
