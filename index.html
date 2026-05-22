@@ -2973,8 +2973,7 @@ window.onCardConfirmedUncheck = (itemId, checkbox) => {
       await updateDoc(doc(db, 'card_pools', itemId), { confirmedMonth: deleteField() });
       const feeSnap = await getDocs(query(
         collection(db, 'expenses'),
-        where('poolId', '==', itemId),
-        where('memo', '==', 'カード手数料')
+        where('poolId', '==', itemId)
       ));
       for (const d of feeSnap.docs) await deleteDoc(doc(db, 'expenses', d.id));
       await loadMonthData();
@@ -4730,160 +4729,152 @@ window.runHealthCheck = async () => {
     getDocs(collection(db, 'account_txs')),
   ]);
 
-  const expMap = new Map();
-  expSnap.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
-  const incMap = new Map();
-  incSnap.forEach(d => incMap.set(d.id, { id: d.id, ...d.data() }));
-  const fcMap = new Map();
-  fcSnap.forEach(d => fcMap.set(d.id, { id: d.id, ...d.data() }));
-  const cpMap = new Map();
-  cpSnap.forEach(d => cpMap.set(d.id, { id: d.id, ...d.data() }));
-  const ccMap = new Map();
-  ccSnap.forEach(d => ccMap.set(d.id, { id: d.id, ...d.data() }));
+  const expMap = new Map(); expSnap.forEach(d => expMap.set(d.id, { id: d.id, ...d.data() }));
+  const incMap = new Map(); incSnap.forEach(d => incMap.set(d.id, { id: d.id, ...d.data() }));
+  const fcMap  = new Map(); fcSnap.forEach(d =>  fcMap.set(d.id, { id: d.id, ...d.data() }));
+  const cpMap  = new Map(); cpSnap.forEach(d =>  cpMap.set(d.id, { id: d.id, ...d.data() }));
+  const ccMap  = new Map(); ccSnap.forEach(d =>  ccMap.set(d.id, { id: d.id, ...d.data() }));
+  const txMap  = new Map(); txSnap.forEach(d =>  txMap.set(d.id, { id: d.id, ...d.data() }));
 
-  const expArr = [...expMap.values()];
-  const txArr = [];
-  txSnap.forEach(d => txArr.push({ id: d.id, ...d.data() }));
-
-  // ① 孤立 card_pools
-  const orphanPools = [];
+  // A1: card_pools.expenseId → expenses
+  const issuesA1 = [];
   cpMap.forEach(cp => {
-    if (cp.fixedCostId) {
-      if (!fcMap.has(cp.fixedCostId)) {
-        orphanPools.push({ ...cp, reason: `fixedCostId="${cp.fixedCostId}" が fixed_costs に存在しない` });
-      }
-    } else {
-      const linked = expArr.find(e =>
-        e.date === cp.date &&
-        (e.amount || 0) === (cp.amount || 0) &&
-        e.cardId === cp.cardId &&
-        e.payMethod === 'card'
-      );
-      if (!linked) {
-        orphanPools.push({ ...cp, reason: '対応する expenses なし、fixedCostId なし' });
-      }
-    }
+    if (cp.expenseId && !expMap.has(cp.expenseId))
+      issuesA1.push({ ...cp, reason: `expenseId="${cp.expenseId.substring(0,8)}" が expenses に存在しない` });
   });
 
-  // ② 孤立 card_confirmed
-  const orphanConfirmed = [];
+  // A2: expenses.cardPoolId → card_pools
+  const issuesA2 = [];
+  expMap.forEach(exp => {
+    if (exp.cardPoolId && !cpMap.has(exp.cardPoolId))
+      issuesA2.push({ ...exp, reason: `cardPoolId="${exp.cardPoolId.substring(0,8)}" が card_pools に存在しない` });
+  });
+
+  // A3: card_pools.fixedCostId → fixed_costs
+  const issuesA3 = [];
+  cpMap.forEach(cp => {
+    if (cp.fixedCostId && !fcMap.has(cp.fixedCostId))
+      issuesA3.push({ ...cp, reason: `fixedCostId="${cp.fixedCostId.substring(0,8)}" が fixed_costs に存在しない` });
+  });
+
+  // A4: account_txs.incomeId → income
+  const issuesA4 = [];
+  txMap.forEach(tx => {
+    if (tx.incomeId && !incMap.has(tx.incomeId))
+      issuesA4.push({ ...tx, reason: `incomeId="${tx.incomeId.substring(0,8)}" が income に存在しない` });
+  });
+
+  // A5: account_txs.fixedCostId → fixed_costs
+  const issuesA5 = [];
+  txMap.forEach(tx => {
+    if (tx.fixedCostId && !fcMap.has(tx.fixedCostId))
+      issuesA5.push({ ...tx, reason: `fixedCostId="${tx.fixedCostId.substring(0,8)}" が fixed_costs に存在しない` });
+  });
+
+  // A6: account_txs.expenseId → expenses
+  const issuesA6 = [];
+  txMap.forEach(tx => {
+    if (tx.expenseId && !expMap.has(tx.expenseId))
+      issuesA6.push({ ...tx, reason: `expenseId="${tx.expenseId.substring(0,8)}" が expenses に存在しない` });
+  });
+
+  // A7: expenses.fixedCostId → fixed_costs
+  const issuesA7 = [];
+  expMap.forEach(exp => {
+    if (exp.fixedCostId && !fcMap.has(exp.fixedCostId))
+      issuesA7.push({ ...exp, reason: `fixedCostId="${exp.fixedCostId.substring(0,8)}" が fixed_costs に存在しない` });
+  });
+
+  // A8: account_txs.withdrawTxId → account_txs
+  const issuesA8 = [];
+  txMap.forEach(tx => {
+    if (tx.withdrawTxId && !txMap.has(tx.withdrawTxId))
+      issuesA8.push({ ...tx, reason: `withdrawTxId="${tx.withdrawTxId.substring(0,8)}" が account_txs に存在しない` });
+  });
+
+  // A9: account_txs.parentTxId → account_txs
+  const issuesA9 = [];
+  txMap.forEach(tx => {
+    if (tx.parentTxId && !txMap.has(tx.parentTxId))
+      issuesA9.push({ ...tx, reason: `parentTxId="${tx.parentTxId.substring(0,8)}" が account_txs に存在しない` });
+  });
+
+  // A10: expenses.parentTxId → account_txs
+  const issuesA10 = [];
+  expMap.forEach(exp => {
+    if (exp.parentTxId && !txMap.has(exp.parentTxId))
+      issuesA10.push({ ...exp, reason: `parentTxId="${exp.parentTxId.substring(0,8)}" が account_txs に存在しない` });
+  });
+
+  // A11: account_txs.debitExpenseId → expenses
+  const issuesA11 = [];
+  txMap.forEach(tx => {
+    if (tx.debitExpenseId && !expMap.has(tx.debitExpenseId))
+      issuesA11.push({ ...tx, reason: `debitExpenseId="${tx.debitExpenseId.substring(0,8)}" が expenses に存在しない` });
+  });
+
+  // A12: card_confirmed.poolId → card_pools
+  const issuesA12 = [];
   ccMap.forEach(cc => {
-    if (!cc.poolId || !cpMap.has(cc.poolId)) {
-      orphanConfirmed.push({ ...cc, reason: cc.poolId ? `poolId="${cc.poolId}" が card_pools に存在しない` : 'poolId なし' });
-    }
+    if (!cc.poolId || !cpMap.has(cc.poolId))
+      issuesA12.push({ ...cc, reason: cc.poolId ? `poolId="${cc.poolId.substring(0,8)}" が card_pools に存在しない` : 'poolId なし' });
   });
 
-  // ③ 乖離 card_pools
-  const mismatchPools = [];
+  // A13: 逆方向 - クレジットカード支出 → card_pools（expenseId）
+  const issuesA13 = [];
+  expMap.forEach(exp => {
+    if (exp.payMethod !== 'card' || !exp.cardId) return;
+    const card = settings.cards.find(c => c.id === exp.cardId);
+    if (card?.isDebit) return;
+    if (![...cpMap.values()].some(cp => cp.expenseId === exp.id))
+      issuesA13.push({ ...exp, reason: 'カード払い支出を expenseId で参照する card_pools が存在しない' });
+  });
+
+  // A14: 逆方向 - デビットカード支出 → account_txs（debitExpenseId）
+  const issuesA14 = [];
+  expMap.forEach(exp => {
+    if (exp.payMethod !== 'card' || !exp.cardId) return;
+    const card = settings.cards.find(c => c.id === exp.cardId);
+    if (!card?.isDebit) return;
+    if (![...txMap.values()].some(tx => tx.debitExpenseId === exp.id))
+      issuesA14.push({ ...exp, reason: 'デビット支出を debitExpenseId で参照する account_txs が存在しない' });
+  });
+
+  // B1: card_pools vs expenses amount 乖離
+  const issuesB1 = [];
+  cpMap.forEach(cp => {
+    if (!cp.expenseId) return;
+    const exp = expMap.get(cp.expenseId);
+    if (!exp) return;
+    if (cp.installType === 'installment') return;
+    if ((cp.amount || 0) !== (exp.amount || 0))
+      issuesB1.push({ ...cp, reason: `card_pools.amount=${cp.amount} vs expenses.amount=${exp.amount}` });
+  });
+
+  // B2: card_pools vs fixed_costs amount 乖離
+  const issuesB2 = [];
   cpMap.forEach(cp => {
     if (!cp.fixedCostId) return;
     const fc = fcMap.get(cp.fixedCostId);
     if (!fc) return;
     const fcAmt = fc.actualAmount ?? fc.amount ?? 0;
-    const cpAmt = cp.amount ?? 0;
-    if (fcAmt !== cpAmt) {
-      mismatchPools.push({ ...cp, reason: `fixed_costs.amount=${fcAmt} vs card_pools.amount=${cpAmt}` });
-    }
+    if ((cp.amount || 0) !== fcAmt)
+      issuesB2.push({ ...cp, reason: `card_pools.amount=${cp.amount} vs fixed_costs.amount=${fcAmt}` });
   });
 
-  // ④ 孤立 account_txs
-  const orphanTxs = [];
-  txArr.forEach(tx => {
-    const memo = tx.memo || '';
-    if (memo.startsWith('収入：')) {
-      if (!tx.incomeId || !incMap.has(tx.incomeId)) {
-        orphanTxs.push({ ...tx, reason: tx.incomeId ? `incomeId="${tx.incomeId}" が income に存在しない` : 'incomeId なし（収入連動）' });
-      }
-    } else if (tx.fixedCostId) {
-      if (!fcMap.has(tx.fixedCostId)) {
-        orphanTxs.push({ ...tx, reason: `fixedCostId="${tx.fixedCostId}" が fixed_costs に存在しない` });
-      }
-    }
-  });
-
-  // ⑤ 孤立 expenses（カード払い）※デビットカードは除外
-  const orphanExpCard = [];
-  expArr.forEach(e => {
-    if (e.payMethod !== 'card') return;
-    const card = settings.cards.find(c => c.id === e.cardId);
-    if (card?.isDebit) return; // デビットは card_pools を使わない
-    const linked = [...cpMap.values()].find(cp =>
-      cp.date === e.date &&
-      (cp.amount || 0) === (e.amount || 0) &&
-      cp.cardId === e.cardId
-    );
-    if (!linked) {
-      orphanExpCard.push({ ...e, reason: '対応する card_pools が存在しない' });
-    }
-  });
-
-  // ⑥ デビット支出：対応する口座記録なし
-  const orphanDebitExp = [];
-  expArr.forEach(e => {
-    if (e.payMethod !== 'card') return;
-    const card = settings.cards.find(c => c.id === e.cardId);
-    if (!card?.isDebit) return;
-    const linked = txArr.find(t => t.debitExpenseId === e.id);
-    if (!linked) {
-      orphanDebitExp.push({ ...e, reason: 'デビット支出だが対応する口座記録（debitExpenseId）がありません' });
-    }
-  });
-
-  // ⑦ 口座記録（debitExpenseId）：元の支出なし
-  const orphanDebitTxs = [];
-  txArr.forEach(tx => {
-    if (!tx.debitExpenseId) return;
-    if (!expMap.has(tx.debitExpenseId)) {
-      orphanDebitTxs.push({ ...tx, reason: `debitExpenseId="${tx.debitExpenseId}" が expenses に存在しない` });
-    }
-  });
-
-  // ⑧ 振込手数料 account_txs → 対応 expense なし
-  const orphanFeeTransferTxs = txArr.filter(t => {
-    if (!(t.memo || '').includes('振込手数料') || !t.fixedCostId) return false;
-    return !expArr.some(e =>
-      e.fixedCostId === t.fixedCostId &&
-      (e.memo || '').includes('振込手数料') &&
-      e.date === t.date &&
-      (e.amount || 0) === (t.amount || 0)
-    );
-  }).map(t => ({ ...t, reason: `fixedCostId="${t.fixedCostId}" に対応する振込手数料 expense がありません` }));
-
-  // ⑨ 振込手数料 expense → 対応 account_txs なし
-  const orphanFeeTransferExps = expArr.filter(e => {
-    if (!(e.memo || '').includes('振込手数料') || !e.fixedCostId) return false;
-    return !txArr.some(t =>
-      t.fixedCostId === e.fixedCostId &&
-      (t.memo || '').includes('振込手数料') &&
-      t.date === e.date &&
-      (t.amount || 0) === (e.amount || 0)
-    );
-  }).map(e => ({ ...e, reason: `fixedCostId="${e.fixedCostId}" に対応する振込手数料 account_txs がありません` }));
-
-  // ⑩ 手数料 account_txs → 対応 expense なし
-  const orphanFeeBankTxs = txArr.filter(t => {
-    if (t.memo !== '手数料' || t.fixedCostId || t.incomeId) return false;
-    return !expArr.some(e =>
-      e.memo === '銀行手数料' &&
-      e.accountId === t.accountId &&
-      e.date === t.date &&
-      (e.amount || 0) === (t.amount || 0)
-    );
-  }).map(t => ({ ...t, reason: `対応する銀行手数料 expense がありません（accountId=${t.accountId} date=${t.date}）` }));
-
-  // ⑪ 銀行手数料 expense → 対応 account_txs なし
-  const orphanFeeBankExps = expArr.filter(e => {
-    if (e.memo !== '銀行手数料') return false;
-    return !txArr.some(t =>
-      t.memo === '手数料' &&
-      t.accountId === e.accountId &&
-      t.date === e.date &&
-      (t.amount || 0) === (e.amount || 0)
-    );
-  }).map(e => ({ ...e, reason: `対応する手数料 account_txs がありません（accountId=${e.accountId} date=${e.date}）` }));
+  const totalIssues = issuesA1.length + issuesA2.length + issuesA3.length + issuesA4.length +
+    issuesA5.length + issuesA6.length + issuesA7.length + issuesA8.length + issuesA9.length +
+    issuesA10.length + issuesA11.length + issuesA12.length + issuesA13.length + issuesA14.length +
+    issuesB1.length + issuesB2.length;
 
   const short = id => (id || '').substring(0, 8);
   const fmtAmt = n => (n ?? 0).toLocaleString() + '円';
+
+  const statRow = (label, count, sub) => {
+    const c = count === 0 ? 'var(--text2)' : 'var(--bad)';
+    const subHtml = sub ? `<div style="font-size:10px;color:var(--text2);margin-top:2px;margin-left:8px;">${sub}</div>` : '';
+    return `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value" style="color:${c};">${count}件</span></div>${subHtml}`;
+  };
 
   const makeDetail = (label, col, items, fields) => {
     if (!items.length) return '';
@@ -4894,79 +4885,72 @@ window.runHealthCheck = async () => {
       }).join('　');
       return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;border-bottom:1px solid var(--border);padding:8px 0;"><div style="flex:1;font-size:12px;"><div>${info}</div><div style="color:var(--bad);margin-top:2px;font-size:11px;">理由：${r.reason}</div></div><button class="btn-icon-del" onclick="deleteHealthCheckOne('${col}','${r.id}')">🗑️</button></div>`;
     }).join('');
-    return `<div class="card" style="margin-top:10px;"><div class="card-title">${label} 詳細</div>${rows}</div>`;
+    const uid = `hc_${col}_${label.replace(/[^a-zA-Z0-9]/g, '')}`;
+    return `<div class="card" style="margin-top:10px;"><div class="card-title" style="cursor:pointer;" onclick="const b=document.getElementById('${uid}');b.style.display=b.style.display==='none'?'block':'none';">${label} 詳細 ▼</div><div id="${uid}">${rows}</div></div>`;
   };
 
-  const total = orphanPools.length + orphanConfirmed.length + mismatchPools.length + orphanTxs.length + orphanExpCard.length + orphanDebitExp.length + orphanDebitTxs.length + orphanFeeTransferTxs.length + orphanFeeTransferExps.length + orphanFeeBankTxs.length + orphanFeeBankExps.length;
-  const summaryColor = total === 0 ? 'var(--good,#4caf50)' : 'var(--bad)';
-  const summaryText = total === 0 ? '✅ データは健全です' : `⚠️ ${total}件の確認すべきデータがあります`;
+  const summaryColor = totalIssues === 0 ? 'var(--good,#4caf50)' : 'var(--bad)';
+  const summaryText = totalIssues === 0 ? '✅ データは健全です' : `⚠️ ${totalIssues}件の確認すべきデータがあります`;
 
-  const statRow = (label, count, sub) => {
-    const c = count === 0 ? 'var(--text2)' : 'var(--bad)';
-    const subHtml = sub ? `<div style="font-size:10px;color:var(--text2);margin-top:2px;margin-left:8px;">${sub}</div>` : '';
-    return `<div class="stat-row"><span class="stat-label">${label}</span><span class="stat-value" style="color:${c};">${count}件</span></div>${subHtml}`;
-  };
+  const expFields = [{ label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }];
+  const cpFields  = [{ label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }];
+  const txFields  = [{ label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }];
+  const ccFields  = [{ label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'poolId', key: 'poolId' }];
 
   const summary = `
     <div class="card">
       <div class="card-title" style="font-size:15px;color:${summaryColor};">${summaryText}</div>
-      ${statRow('① 未払いプール：元データなし', orphanPools.length, '支出タブ・固定費タブのどちらにも対応データがありません')}
-      ${statRow('② 引き落とし済み：元プールなし', orphanConfirmed.length, '対応する未払いプール記録が見つかりません')}
-      ${statRow('③ 未払いプール：固定費と金額が不一致', mismatchPools.length, '固定費の金額が変更されたが、未払いプール側に反映されていません')}
-      ${statRow('④ 口座記録：元データなし', orphanTxs.length, '対応する収入・支出・固定費が見つかりません')}
-      ${statRow('⑤ カード支出：未払いプールなし', orphanExpCard.length, 'カード払いの支出だが、未払いプール記録が見当たりません')}
-      ${statRow('⑥ デビット支出：口座記録なし', orphanDebitExp.length, 'デビットカード支出に対応する口座引き落とし記録がありません')}
-      ${statRow('⑦ 口座記録：元のデビット支出なし', orphanDebitTxs.length, 'debitExpenseIdが付いた口座記録だが、元の支出が見つかりません')}
-      ${statRow('⑧ 振込手数料 口座記録：対応支出なし', orphanFeeTransferTxs.length, '振込手数料の口座記録に対応する支出が見当たりません')}
-      ${statRow('⑨ 振込手数料 支出：対応口座記録なし', orphanFeeTransferExps.length, '振込手数料の支出に対応する口座記録が見当たりません')}
-      ${statRow('⑩ 手数料 口座記録：対応支出なし', orphanFeeBankTxs.length, '銀行手数料の口座記録に対応する支出が見当たりません')}
-      ${statRow('⑪ 銀行手数料 支出：対応口座記録なし', orphanFeeBankExps.length, '銀行手数料の支出に対応する口座記録が見当たりません')}
+      <div style="margin-top:4px;font-size:11px;color:var(--text2);margin-bottom:8px;">紐付けIDベースの双方向検査 v2</div>
+      <div style="font-size:12px;font-weight:bold;color:var(--text2);margin:8px 0 4px;">─ カテゴリA：参照先の存在確認 ─</div>
+      ${statRow('A1: card_pools.expenseId → expenses', issuesA1.length, '未払いプールの expenseId が指す支出が存在しない')}
+      ${statRow('A2: expenses.cardPoolId → card_pools', issuesA2.length, '支出の cardPoolId が指すプールが存在しない')}
+      ${statRow('A3: card_pools.fixedCostId → fixed_costs', issuesA3.length, '未払いプールの fixedCostId が fixed_costs に存在しない')}
+      ${statRow('A4: account_txs.incomeId → income', issuesA4.length, '口座記録の incomeId が income に存在しない')}
+      ${statRow('A5: account_txs.fixedCostId → fixed_costs', issuesA5.length, '口座記録の fixedCostId が fixed_costs に存在しない')}
+      ${statRow('A6: account_txs.expenseId → expenses', issuesA6.length, '口座記録の expenseId が expenses に存在しない')}
+      ${statRow('A7: expenses.fixedCostId → fixed_costs', issuesA7.length, '支出の fixedCostId が fixed_costs に存在しない')}
+      ${statRow('A8: account_txs.withdrawTxId → account_txs', issuesA8.length, '入金記録の withdrawTxId が account_txs に存在しない')}
+      ${statRow('A9: account_txs.parentTxId → account_txs', issuesA9.length, '手数料 tx の parentTxId が account_txs に存在しない')}
+      ${statRow('A10: expenses.parentTxId → account_txs', issuesA10.length, '手数料支出の parentTxId が account_txs に存在しない')}
+      ${statRow('A11: account_txs.debitExpenseId → expenses', issuesA11.length, 'デビット口座記録の debitExpenseId が expenses に存在しない')}
+      ${statRow('A12: card_confirmed.poolId → card_pools', issuesA12.length, '確定済み記録の poolId が card_pools に存在しない')}
+      ${statRow('A13: クレジット支出 → card_pools（逆方向）', issuesA13.length, 'カード払い支出を expenseId で参照する card_pools が存在しない')}
+      ${statRow('A14: デビット支出 → account_txs（逆方向）', issuesA14.length, 'デビット支出を debitExpenseId で参照する account_txs が存在しない')}
+      <div style="font-size:12px;font-weight:bold;color:var(--text2);margin:8px 0 4px;">─ カテゴリB：金額乖離確認 ─</div>
+      ${statRow('B1: card_pools vs expenses 金額乖離', issuesB1.length, '紐付く支出と未払いプールの金額が一致しない')}
+      ${statRow('B2: card_pools vs fixed_costs 金額乖離', issuesB2.length, '紐付く固定費と未払いプールの金額が一致しない')}
     </div>`;
 
-  const detail1 = makeDetail('① 未払いプール：元データなし', 'card_pools', orphanPools, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
-  ]);
-  const detail2 = makeDetail('② 引き落とし済み：元プールなし', 'card_confirmed', orphanConfirmed, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'poolId', key: 'poolId' }
-  ]);
-  const detail3 = makeDetail('③ 未払いプール：固定費と金額が不一致', 'card_pools', mismatchPools, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
-  ]);
-  const detail4 = makeDetail('④ 口座記録：元データなし', 'account_txs', orphanTxs, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }
-  ]);
-  const detail5 = makeDetail('⑤ カード支出：未払いプールなし', 'expenses', orphanExpCard, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
-  ]);
-  const detail6 = makeDetail('⑥ デビット支出：口座記録なし', 'expenses', orphanDebitExp, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }
-  ]);
-  const detail7 = makeDetail('⑦ 口座記録：元のデビット支出なし', 'account_txs', orphanDebitTxs, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }
-  ]);
-  const detail8 = makeDetail('⑧ 振込手数料 口座記録：対応支出なし', 'account_txs', orphanFeeTransferTxs, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'fixedCostId', key: 'fixedCostId' }
-  ]);
-  const detail9 = makeDetail('⑨ 振込手数料 支出：対応口座記録なし', 'expenses', orphanFeeTransferExps, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'fixedCostId', key: 'fixedCostId' }
-  ]);
-  const detail10 = makeDetail('⑩ 手数料 口座記録：対応支出なし', 'account_txs', orphanFeeBankTxs, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'accountId', key: 'accountId' }
-  ]);
-  const detail11 = makeDetail('⑪ 銀行手数料 支出：対応口座記録なし', 'expenses', orphanFeeBankExps, [
-    { label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'accountId', key: 'accountId' }
-  ]);
+  resultEl.innerHTML = summary
+    + makeDetail('A1: card_pools.expenseId → expenses 欠落', 'card_pools', issuesA1, cpFields)
+    + makeDetail('A2: expenses.cardPoolId → card_pools 欠落', 'expenses', issuesA2, expFields)
+    + makeDetail('A3: card_pools.fixedCostId → fixed_costs 欠落', 'card_pools', issuesA3, cpFields)
+    + makeDetail('A4: account_txs.incomeId → income 欠落', 'account_txs', issuesA4, txFields)
+    + makeDetail('A5: account_txs.fixedCostId → fixed_costs 欠落', 'account_txs', issuesA5, txFields)
+    + makeDetail('A6: account_txs.expenseId → expenses 欠落', 'account_txs', issuesA6, txFields)
+    + makeDetail('A7: expenses.fixedCostId → fixed_costs 欠落', 'expenses', issuesA7, expFields)
+    + makeDetail('A8: account_txs.withdrawTxId → account_txs 欠落', 'account_txs', issuesA8, txFields)
+    + makeDetail('A9: account_txs.parentTxId → account_txs 欠落', 'account_txs', issuesA9, txFields)
+    + makeDetail('A10: expenses.parentTxId → account_txs 欠落', 'expenses', issuesA10, expFields)
+    + makeDetail('A11: account_txs.debitExpenseId → expenses 欠落', 'account_txs', issuesA11, txFields)
+    + makeDetail('A12: card_confirmed.poolId → card_pools 欠落', 'card_confirmed', issuesA12, ccFields)
+    + makeDetail('A13: クレジット支出 → card_pools 欠落（逆方向）', 'expenses', issuesA13, expFields)
+    + makeDetail('A14: デビット支出 → account_txs 欠落（逆方向）', 'expenses', issuesA14, expFields)
+    + makeDetail('B1: card_pools vs expenses 金額乖離', 'card_pools', issuesB1, cpFields)
+    + makeDetail('B2: card_pools vs fixed_costs 金額乖離', 'card_pools', issuesB2, cpFields);
 
-  resultEl.innerHTML = summary + detail1 + detail2 + detail3 + detail4 + detail5 + detail6 + detail7 + detail8 + detail9 + detail10 + detail11;
-
-  // 削除対象を集約（④⑧⑩ account_txs は除外）
+  // 削除対象を集約（account_txs は除外）
   _healthCheckIssues = [
-    ...orphanPools.map(r => ({ col: 'card_pools', id: r.id, reason: '①孤立: ' + r.reason })),
-    ...orphanConfirmed.map(r => ({ col: 'card_confirmed', id: r.id, reason: '②孤立: ' + r.reason })),
-    ...mismatchPools.map(r => ({ col: 'card_pools', id: r.id, reason: '③乖離: ' + r.reason })),
-    ...orphanExpCard.map(r => ({ col: 'expenses', id: r.id, reason: '⑤孤立: ' + r.reason })),
-    ...orphanFeeTransferExps.map(r => ({ col: 'expenses', id: r.id, reason: '⑨孤立: ' + r.reason })),
-    ...orphanFeeBankExps.map(r => ({ col: 'expenses', id: r.id, reason: '⑪孤立: ' + r.reason })),
+    ...issuesA1.map(r => ({ col: 'card_pools',    id: r.id, reason: 'A1: ' + r.reason })),
+    ...issuesA2.map(r => ({ col: 'expenses',       id: r.id, reason: 'A2: ' + r.reason })),
+    ...issuesA3.map(r => ({ col: 'card_pools',    id: r.id, reason: 'A3: ' + r.reason })),
+    ...issuesA7.map(r => ({ col: 'expenses',       id: r.id, reason: 'A7: ' + r.reason })),
+    ...issuesA10.map(r => ({ col: 'expenses',      id: r.id, reason: 'A10: ' + r.reason })),
+    ...issuesA12.map(r => ({ col: 'card_confirmed', id: r.id, reason: 'A12: ' + r.reason })),
+    ...issuesA13.map(r => ({ col: 'expenses',      id: r.id, reason: 'A13: ' + r.reason })),
+    ...issuesA14.map(r => ({ col: 'expenses',      id: r.id, reason: 'A14: ' + r.reason })),
+    ...issuesB1.map(r => ({ col: 'card_pools',    id: r.id, reason: 'B1: ' + r.reason })),
+    ...issuesB2.map(r => ({ col: 'card_pools',    id: r.id, reason: 'B2: ' + r.reason })),
   ];
   const deleteCount = _healthCheckIssues.length;
   const wrap = document.getElementById('healthDeleteWrap');
