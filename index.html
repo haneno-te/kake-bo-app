@@ -2122,7 +2122,10 @@ async function loadMonthData() {
   incSnap.forEach(d => {
     const data = { id: d.id, ...d.data() };
     if (data.date >= ymStart && data.date < nextMonth) incomes.push(data);
-    if (data.date >= prevYmStart && data.date < ymStart) prevMonthIncome += data.amount || 0;
+    if (data.date >= prevYmStart && data.date < ymStart) {
+      const incType = settings.incomeTypes.find(t => t.id === data.typeId);
+      if (!incType || incType.includeInPrev !== false) prevMonthIncome += data.amount || 0;
+    }
   });
 
   // 口座TXは全件（残高計算のため）
@@ -4250,7 +4253,7 @@ function renderSettings() {
   catContainer.innerHTML = catHtml;
 
   // 収入項目
-  renderSimpleSettingList('incomeTypeList', settings.incomeTypes, 'incomeType');
+  renderIncomeTypeList();
 
   // お店（カテゴリ別アコーディオン）
   const shopContainer = document.getElementById('shopList');
@@ -4415,6 +4418,30 @@ function renderSettings() {
     bdCatContainer.innerHTML = '<div style="height:8px;"></div>' + bdCatHtml;
   }
 }
+
+function renderIncomeTypeList() {
+  const container = document.getElementById('incomeTypeList');
+  container.innerHTML = settings.incomeTypes.map((item, i) => `
+    <div class="setting-item">
+      <div style="display:flex;gap:2px;">
+        <button class="btn-order" onclick="moveSettingItem('incomeType',${i},-1)">▲</button>
+        <button class="btn-order" onclick="moveSettingItem('incomeType',${i},1)">▼</button>
+      </div>
+      <div class="setting-item-name">${item.name}</div>
+      <label style="display:flex;align-items:center;gap:2px;font-size:10px;color:var(--text2);cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" ${item.includeInPrev !== false ? 'checked' : ''}
+          onchange="toggleIncomeTypeIncludeInPrev('${item.id}',this.checked)"
+          style="accent-color:var(--accent);">前月集計
+      </label>
+      <button class="btn-icon-edit" onclick="openSettingEditModal('${item.id}','incomeType')">✏️</button>
+      <button class="btn-icon-del" onclick="deleteSettingItem('${item.id}','incomeType')">🗑️</button>
+    </div>
+  `).join('');
+}
+
+window.toggleIncomeTypeIncludeInPrev = async (id, checked) => {
+  await updateDoc(doc(db, 'kakeibo_settings', id), { includeInPrev: checked });
+};
 
 function renderSimpleSettingList(containerId, items, type) {
   const container = document.getElementById(containerId);
