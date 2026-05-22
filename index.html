@@ -3981,21 +3981,22 @@ window.saveIncome = async () => {
 
   const data = { date, amount, typeId, accountId, memo };
   if (editingIncomeId) {
-    await updateDoc(doc(db, 'income', editingIncomeId), data);
-
-    // 修正C: 編集時の口座残高再計算（旧 account_txs を削除して再作成）
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'income', editingIncomeId), data);
     const linked = accountTxs.filter(t => t.incomeId === editingIncomeId);
     for (const t of linked) {
-      await deleteDoc(doc(db, 'account_txs', t.id));
+      batch.delete(doc(db, 'account_txs', t.id));
     }
     if (accountId) {
-      await addDoc(collection(db, 'account_txs'), {
+      const newTxRef = doc(collection(db, 'account_txs'));
+      batch.set(newTxRef, {
         accountId, txType: 'transfer_in', amount: accountAmt, date,
         memo: `収入：${settings.incomeTypes.find(t=>t.id===typeId)?.name||''}${memo?' / '+memo:''}`,
         incomeId: editingIncomeId
       });
-      showToast('口座残高に反映しました');
     }
+    await batch.commit();
+    if (accountId) showToast('口座残高に反映しました');
   } else {
     const incRef = await addDoc(collection(db, 'income'), data);
     // 口座への反映
