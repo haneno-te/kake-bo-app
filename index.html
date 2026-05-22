@@ -2122,7 +2122,9 @@ async function loadMonthData() {
   incSnap.forEach(d => {
     const data = { id: d.id, ...d.data() };
     if (data.date >= ymStart && data.date < nextMonth) incomes.push(data);
-    if (data.date >= prevYmStart && data.date < ymStart) prevMonthIncome += data.amount || 0;
+    if (data.date >= prevYmStart && data.date < ymStart) {
+      if (data.includeInPrev !== false) prevMonthIncome += data.amount || 0;
+    }
   });
 
   // 口座TXは全件（残高計算のため）
@@ -2360,6 +2362,12 @@ function buildIncomeCard(e, showActions = true) {
   </div>` : '';
   return `<div class="record-item">
     <div class="record-top">
+      <label style="display:flex;align-items:center;justify-content:center;padding-right:8px;cursor:pointer;flex-shrink:0;" title="前月集計に含める">
+        <input type="checkbox"
+          ${e.includeInPrev !== false ? 'checked' : ''}
+          onchange="toggleIncomeIncludeInPrev('${e.id}', this.checked)"
+          style="accent-color:var(--income);width:16px;height:16px;">
+      </label>
       <div class="record-left">
         <div class="record-category">収入 · ${typeName}</div>
         <div class="record-memo">${e.memo || '（メモなし）'}</div>
@@ -3980,6 +3988,13 @@ window.deleteIncome = (id) => {
     }
     await loadMonthData();
   });
+};
+
+window.toggleIncomeIncludeInPrev = async (id, checked) => {
+  await updateDoc(doc(db, 'income', id), { includeInPrev: checked });
+  const inc = incomes.find(x => x.id === id);
+  if (inc) inc.includeInPrev = checked;
+  await loadMonthData();
 };
 
 // ===== 口座入出金CRUD =====
