@@ -3687,16 +3687,24 @@ window.saveExpense = async () => {
           await updateDoc(doc(db, 'expenses', editingExpenseId), { cardPoolId: newPoolRef.id });
         }
       } else if (!oldIsDebit && newIsDebit) {
-        const oldPool = cardPools.find(p => p.expenseId === editingExpenseId && !p.confirmedMonth);
-        if (oldPool) await deleteDoc(doc(db, 'card_pools', oldPool.id));
+        const oldPool = cardPools.find(p => p.expenseId === editingExpenseId);
+        if (oldPool) {
+          const linkedConfirmed = await getDocs(query(collection(db, 'card_confirmed'), where('poolId', '==', oldPool.id)));
+          for (const cc of linkedConfirmed.docs) await deleteDoc(doc(db, 'card_confirmed', cc.id));
+          await deleteDoc(doc(db, 'card_pools', oldPool.id));
+        }
         await addDoc(collection(db, 'account_txs'), { accountId: newCard.debitAccountId, txType: 'transfer_out', amount, date, memo: _debitMemo, debitExpenseId: editingExpenseId });
       } else {
         // 両方通常カード
-        const oldPool = cardPools.find(p => p.expenseId === editingExpenseId && !p.confirmedMonth);
+        const oldPool = cardPools.find(p => p.expenseId === editingExpenseId);
         if (oldCardId === newCardId) {
           if (oldPool) await updateDoc(doc(db, 'card_pools', oldPool.id), { amount, memo: _expMemo });
         } else {
-          if (oldPool) await deleteDoc(doc(db, 'card_pools', oldPool.id));
+          if (oldPool) {
+            const linkedConfirmed = await getDocs(query(collection(db, 'card_confirmed'), where('poolId', '==', oldPool.id)));
+            for (const cc of linkedConfirmed.docs) await deleteDoc(doc(db, 'card_confirmed', cc.id));
+            await deleteDoc(doc(db, 'card_pools', oldPool.id));
+          }
           if (newCardId) {
             const newPoolRef = await addDoc(collection(db, 'card_pools'), { amount, date, cardId: newCardId, memo: _expMemo, installType: 'once', expenseId: editingExpenseId });
             await updateDoc(doc(db, 'expenses', editingExpenseId), { cardPoolId: newPoolRef.id });
@@ -3715,8 +3723,13 @@ window.saveExpense = async () => {
         const oldTx = accountTxs.find(t => t.debitExpenseId === editingExpenseId);
         if (oldTx) await deleteDoc(doc(db, 'account_txs', oldTx.id));
       } else {
-        const oldPool = cardPools.find(p => p.expenseId === editingExpenseId && !p.confirmedMonth);
-        if (oldPool) await deleteDoc(doc(db, 'card_pools', oldPool.id));
+        const oldPools = cardPools.filter(p => p.expenseId === editingExpenseId);
+        for (const oldPool of oldPools) {
+          const linkedConfirmed = await getDocs(query(collection(db, 'card_confirmed'), where('poolId', '==', oldPool.id)));
+          for (const cc of linkedConfirmed.docs) await deleteDoc(doc(db, 'card_confirmed', cc.id));
+          await deleteDoc(doc(db, 'card_pools', oldPool.id));
+        }
+        await updateDoc(doc(db, 'expenses', editingExpenseId), { cardPoolId: deleteField() });
       }
     }
 
@@ -3747,9 +3760,8 @@ window.saveExpense = async () => {
       if (card?.isDebit && card?.debitAccountId) {
         await addDoc(collection(db, 'account_txs'), { accountId: card.debitAccountId, txType: 'transfer_out', amount, date, memo: _debitMemo, debitExpenseId: expId });
       } else {
-        const poolDocRef = await addDoc(collection(db, 'card_pools'), { amount, date, cardId: data.cardId, memo: _expMemo, installType: 'once' });
+        const poolDocRef = await addDoc(collection(db, 'card_pools'), { amount, date, cardId: data.cardId, memo: _expMemo, installType: 'once', expenseId: expId });
         await updateDoc(doc(db, 'expenses', expId), { cardPoolId: poolDocRef.id });
-        await updateDoc(doc(db, 'card_pools', poolDocRef.id), { expenseId: expId });
         showToast('カードプールにも追加しました');
       }
     }
