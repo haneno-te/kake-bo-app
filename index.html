@@ -3796,8 +3796,19 @@ window.saveExpense = async () => {
 };
 
 window.deleteExpense = (id) => {
-  showConfirm('この支出記録を削除しますか？', async () => {
-    const expense = expenses.find(x => x.id === id);
+  const expense = expenses.find(x => x.id === id);
+  let msg = 'この支出記録を削除しますか？';
+  if (expense?.payMethod === 'card' && expense.cardId) {
+    const card = settings.cards.find(c => c.id === expense.cardId);
+    if (!card?.isDebit) {
+      const linkedPools = cardPools.filter(p => p.expenseId === id);
+      const hasConfirmed = linkedPools.some(p => p.confirmedMonth);
+      if (hasConfirmed) {
+        msg = 'この支出記録には引き落とし確定済みのカード払い情報が紐付いています。\n削除すると、カードタブの確定済みプールも一緒に削除されます。\n本当に削除しますか？';
+      }
+    }
+  }
+  showConfirm(msg, async () => {
     await deleteDoc(doc(db, 'expenses', id));
     if (expense && expense.payMethod === 'card' && expense.cardId) {
       const card = settings.cards.find(c => c.id === expense.cardId);
@@ -3805,8 +3816,15 @@ window.deleteExpense = (id) => {
         const linked = accountTxs.filter(t => t.debitExpenseId === id);
         for (const t of linked) await deleteDoc(doc(db, 'account_txs', t.id));
       } else {
-        const linked = cardPools.filter(p => p.expenseId === id && !p.confirmedMonth);
-        for (const p of linked) await deleteDoc(doc(db, 'card_pools', p.id));
+        const linkedPools = cardPools.filter(p => p.expenseId === id);
+        for (const p of linkedPools) {
+          const linkedConfirmed = await getDocs(query(
+            collection(db, 'card_confirmed'),
+            where('poolId', '==', p.id)
+          ));
+          for (const cc of linkedConfirmed.docs) await deleteDoc(doc(db, 'card_confirmed', cc.id));
+          await deleteDoc(doc(db, 'card_pools', p.id));
+        }
       }
     }
     if (expense && expense.payMethod === 'transfer') {
