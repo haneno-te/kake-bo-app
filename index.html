@@ -4097,7 +4097,9 @@ window.deleteAccountTx = (id) => {
   const hasLinkedFees = hasFeeTypes && accountTxs.some(tx => tx.parentTxId === id);
 
   let msg = 'この口座記録を削除しますか？';
-  if (isWithdraw) {
+  if (isWithdraw && hasLinkedFees) {
+    msg = 'この引き下ろし記録を削除しますか？連動する現金口座への入金記録および手数料記録も一緒に削除されます。';
+  } else if (isWithdraw) {
     msg = 'この引き下ろし記録を削除しますか？連動する現金口座への入金記録も一緒に削除されます。';
   } else if (hasLinkedFees) {
     msg = 'この記録を削除しますか？連動する手数料記録も一緒に削除されます。';
@@ -4984,7 +4986,7 @@ window.setTxType = (type) => {
     btn.classList.toggle('active', ['deposit','transfer_in','withdraw','transfer_out','move'][i] === type);
   });
   document.getElementById('txToAccountWrap').style.display = type === 'move' ? 'block' : 'none';
-  document.getElementById('txFeeWrap').style.display = (type === 'transfer_out' || type === 'withdraw' || type === 'move') ? 'block' : 'none';
+  document.getElementById('txFeeWrap').style.display = (!editingAccountTxId && (type === 'transfer_out' || type === 'withdraw' || type === 'move')) ? 'block' : 'none';
   const labels = { deposit:'入金先口座', withdraw:'出金元口座', transfer_in:'入金先口座', transfer_out:'出金元口座', move:'出金元口座' };
   document.getElementById('txAccountLabel').textContent = labels[type] || '口座';
 };
