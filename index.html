@@ -4736,11 +4736,16 @@ window.runHealthCheck = async () => {
   const ccMap  = new Map(); ccSnap.forEach(d =>  ccMap.set(d.id, { id: d.id, ...d.data() }));
   const txMap  = new Map(); txSnap.forEach(d =>  txMap.set(d.id, { id: d.id, ...d.data() }));
 
-  // A1: card_pools.expenseId → expenses
+  // A1: card_pools の孤立検査（expenseId/fixedCostId 欠落 or 参照切れ）
   const issuesA1 = [];
   cpMap.forEach(cp => {
-    if (cp.expenseId && !expMap.has(cp.expenseId))
+    if (cp.expenseId && !expMap.has(cp.expenseId)) {
       issuesA1.push({ ...cp, reason: `expenseId="${cp.expenseId.substring(0,8)}" が expenses に存在しない` });
+      return;
+    }
+    if (!cp.expenseId && !cp.fixedCostId) {
+      issuesA1.push({ ...cp, reason: 'expenseId / fixedCostId のいずれも持たない孤立データ' });
+    }
   });
 
   // A2: expenses.cardPoolId → card_pools
