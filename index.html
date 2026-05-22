@@ -748,7 +748,7 @@
   <div id="incomeList"><div class="loading">データなし</div></div>
   <div class="card" style="margin-top:8px;">
     <div class="stat-row">
-      <span class="stat-label">今月収入合計</span>
+      <span class="stat-label">✅収入合計</span>
       <span class="stat-value" style="color:var(--income);" id="incomeMonthTotal">¥0</span>
     </div>
   </div>
@@ -2549,7 +2549,8 @@ function renderIncomeTab() {
     list.innerHTML = incomes.slice().sort((a,b) => b.date.localeCompare(a.date)).map(e => buildIncomeCard(e)).join('');
   }
   const incTotal = incomes.reduce((s,e) => s + (e.amount||0), 0);
-  document.getElementById('incomeMonthTotal').textContent = '¥' + incTotal.toLocaleString();
+  const incTotalInPrev = incomes.filter(e => e.includeInPrev !== false).reduce((s,e) => s + (e.amount||0), 0);
+  document.getElementById('incomeMonthTotal').textContent = '¥' + incTotalInPrev.toLocaleString();
   const topEl = document.getElementById('incMonthTotalTop');
   if (topEl) topEl.textContent = '¥' + incTotal.toLocaleString();
 }
@@ -3424,9 +3425,10 @@ function renderSummary() {
       const itemName = b.name || '（名前なし）';
       if (!bdCatMap[catId]) bdCatMap[catId] = { name: catName, total: 0, items: {} };
       bdCatMap[catId].total += b.amount || 0;
-      if (!bdCatMap[catId].items[itemName]) bdCatMap[catId].items[itemName] = { total: 0, count: 0 };
+      if (!bdCatMap[catId].items[itemName]) bdCatMap[catId].items[itemName] = { total: 0, count: 0, hasBad: false };
       bdCatMap[catId].items[itemName].total += b.amount || 0;
       bdCatMap[catId].items[itemName].count++;
+      if (b.isBad) bdCatMap[catId].items[itemName].hasBad = true;
     });
   });
   const bdEl = document.getElementById('breakdownSummary');
@@ -3446,8 +3448,8 @@ function renderSummary() {
           .sort((a, b) => b[1].total - a[1].total)
           .map(([name, v]) => `
             <div class="stat-row" style="padding-left:12px;">
-              <span class="stat-label" style="font-size:12px;">${name}（${v.count}件）</span>
-              <span class="stat-value" style="color:var(--expense);font-size:12px;">¥${v.total.toLocaleString()}</span>
+              <span class="stat-label" style="font-size:12px;">${v.hasBad ? '👿 ' : ''}${name}（${v.count}件）</span>
+              <span class="stat-value" style="color:${v.hasBad ? 'var(--bad)' : 'var(--expense)'};font-size:12px;">¥${v.total.toLocaleString()}</span>
             </div>
           `).join('');
         return `
