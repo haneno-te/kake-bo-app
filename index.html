@@ -515,21 +515,17 @@
     background: var(--surface2); border: 1px solid var(--border);
     border-radius: 8px; padding: 10px; margin-bottom: 8px;
   }
-  .breakdown-row-top { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .breakdown-row-top { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; width: 100%; box-sizing: border-box; }
   .breakdown-row-top input[type=text] {
-    flex: 2; background: var(--bg); border: 1px solid var(--border);
+    flex: 1 1 0; min-width: 0; background: var(--bg); border: 1px solid var(--border);
     border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 13px; outline: none;
   }
-  .breakdown-row-top input[type=number] {
-    flex: 1; background: var(--bg); border: 1px solid var(--border);
-    border-radius: 6px; color: var(--text); padding: 7px 8px; font-size: 13px; outline: none;
-    -moz-appearance: textfield;
+  .breakdown-row-top .bd-amount {
+    flex: 0 0 100px; min-width: 0;
   }
-  .breakdown-row-top input[type=number]::-webkit-inner-spin-button,
-  .breakdown-row-top input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
   .breakdown-row-top button {
-    background: rgba(255,107,107,0.15); border: none; color: var(--expense);
-    border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 13px;
+    flex: 0 0 32px; background: rgba(255,107,107,0.15); border: none; color: var(--expense);
+    border-radius: 6px; padding: 4px 0; cursor: pointer; font-size: 13px;
   }
   .bad-row-toggle {
     display: flex; align-items: center; gap: 8px;
@@ -3912,7 +3908,14 @@ function appendBreakdownRow(b = {}) {
   document.getElementById('expBreakdownList').appendChild(row);
 }
 
-window.addBreakdownRow = () => appendBreakdownRow();
+window.addBreakdownRow = () => {
+  const total = calcGetValue('exp');
+  const existing = document.querySelectorAll('#expBreakdownList .breakdown-row .bd-amount');
+  let sum = 0;
+  existing.forEach(inp => { const v = parseInt(inp.value); if (!isNaN(v)) sum += v; });
+  const remainder = total - sum;
+  appendBreakdownRow(remainder > 0 ? { amount: remainder } : {});
+};
 
 window.onBdCatChange = (catSel) => {
   const groupId = catSel.value;
