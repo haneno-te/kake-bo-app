@@ -5103,27 +5103,31 @@ window.drillDownExpFilter = (filter) => {
 };
 
 window.openBreakdownJumpModal = (itemName, catId) => {
-  const matched = expenses.filter(e =>
-    (e.breakdowns || []).some(b =>
-      b.name === itemName && (b.bdCatGroupId || '__none__') === catId
-    )
-  ).sort((a, b) => b.date.localeCompare(a.date));
+  const matched = expenses
+    .map(e => {
+      const b = (e.breakdowns || []).find(b =>
+        b.name === itemName && (b.bdCatGroupId || '__none__') === catId
+      );
+      return b ? { e, b } : null;
+    })
+    .filter(x => x !== null)
+    .sort((a, b) => b.e.date.localeCompare(a.e.date));
   if (matched.length === 0) return;
   if (matched.length === 1) {
     switchTab('calendar');
-    setTimeout(() => selectDate(matched[0].date), 100);
+    setTimeout(() => selectDate(matched[0].e.date), 100);
     return;
   }
   document.getElementById('bdJumpModalTitle').textContent = `${itemName}（${matched.length}件）`;
   const listEl = document.getElementById('bdJumpList');
   listEl.innerHTML = '';
-  matched.forEach(e => {
+  matched.forEach(({ e, b }) => {
     const shopDisplay = e.shop || e.memo || '（記載なし）';
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;';
     row.innerHTML = `
       <span style="flex-shrink:0;color:var(--text2);font-size:12px;">${e.date.slice(5).replace('-','/')}</span>
-      <span style="flex-shrink:0;color:var(--expense);font-size:13px;font-weight:700;">¥${(e.amount||0).toLocaleString()}</span>
+      <span style="flex-shrink:0;color:var(--expense);font-size:13px;font-weight:700;">¥${(b.amount||0).toLocaleString()}</span>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;">${shopDisplay}</span>
     `;
     row.addEventListener('click', () => {
