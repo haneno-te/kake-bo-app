@@ -2528,6 +2528,7 @@ function buildExpenseCompact(e) {
     <div class="exp-item-row3">
       <span class="exp-item-memo">${(e.shop && e.memo) ? e.memo : ''}</span>
       <span class="exp-item-actions">
+        <button class="btn-edit" onclick="switchTab('calendar');setTimeout(()=>selectDate('${e.date}'),100);">📅</button>
         <button class="btn-edit" onclick="openExpenseModal('${e.id}')">✏️</button>
         <button class="btn-del" onclick="deleteExpense('${e.id}')">🗑️</button>
       </span>
@@ -2613,6 +2614,7 @@ function renderAccountsTab() {
         <span class="account-log-label">${logLabel}</span>
         <span class="account-log-amount ${cls}">${sign}¥${Math.abs(amount).toLocaleString()}</span>
         <span style="display:flex;gap:4px;flex-shrink:0;">
+          <button class="btn-edit" onclick="switchTab('calendar');setTimeout(()=>selectDate('${t.date}'),100);">📅</button>
           <button class="btn-edit" onclick="openAccountTxModal('${t.id}')">✏️</button>
           <button class="btn-del" onclick="deleteAccountTx('${t.id}')">🗑️</button>
         </span>
@@ -3450,6 +3452,7 @@ function renderSummary() {
       bdEl.innerHTML = badRow || '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">内訳データなし</div>';
     } else {
       bdEl.innerHTML = entries.map(([catId, cat], idx) => {
+        const totalCount = Object.values(cat.items).reduce((s, v) => s + v.count, 0);
         const itemsHtml = Object.entries(cat.items)
           .sort((a, b) => b[1].total - a[1].total)
           .map(([name, v]) => `
@@ -3463,7 +3466,7 @@ function renderSummary() {
             <div style="display:flex;justify-content:space-between;align-items:center;
               padding:10px 12px;cursor:pointer;background:var(--surface2);"
               onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-              <span style="font-size:13px;font-weight:700;">${cat.name}</span>
+              <span style="font-size:13px;font-weight:700;">${cat.name} <span style="font-size:11px;font-weight:400;color:var(--text2);">${totalCount}件</span></span>
               <span style="color:var(--expense);font-weight:700;">¥${cat.total.toLocaleString()}</span>
             </div>
             <div style="display:none;padding:4px 0;">
@@ -5100,21 +5103,23 @@ function openModal(id) {
   // アクティブ電卓リセット
   activeCalc = '';
   document.querySelectorAll('.calc-display.active').forEach(el => el.classList.remove('active'));
-  setTimeout(() => {
-    const sheet = modalEl.querySelector('.modal-sheet');
-    if (!sheet) return;
-    const firstCalc = sheet.querySelector('.calc-display');
-    if (firstCalc) {
-      const resultEl = firstCalc.querySelector('[id$="-calcResult"]');
-      if (resultEl) {
-        activeCalc = resultEl.id.replace('-calcResult', '');
-        firstCalc.classList.add('active');
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const sheet = modalEl.querySelector('.modal-sheet');
+      if (!sheet) return;
+      const firstCalc = sheet.querySelector('.calc-display');
+      if (firstCalc) {
+        const resultEl = firstCalc.querySelector('[id$="-calcResult"]');
+        if (resultEl) {
+          activeCalc = resultEl.id.replace('-calcResult', '');
+          firstCalc.classList.add('active');
+        }
+        sheet.scrollTop = Math.max(0, firstCalc.offsetTop - 20);
+      } else {
+        sheet.scrollTop = 0;
       }
-      sheet.scrollTop = Math.max(0, firstCalc.offsetTop - 20);
-    } else {
-      sheet.scrollTop = 0;
-    }
-  }, 50);
+    });
+  });
 }
 window.closeModal = (id) => {
   document.getElementById(id).classList.remove('open');
