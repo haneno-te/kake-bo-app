@@ -5178,10 +5178,8 @@ function openModal(id) {
         activeCalc = resultEl.id.replace('-calcResult', '');
         firstCalc.classList.add('active');
       }
-      sheet.scrollTop = firstCalc.offsetTop - 20;
-    } else {
-      sheet.scrollTop = 0;
     }
+    sheet.scrollTop = 0;
   }, 50);
 }
 window.closeModal = (id) => {
