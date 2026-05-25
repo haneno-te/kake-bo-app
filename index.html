@@ -3333,6 +3333,12 @@ window.moveFixed = async (i, delta) => {
   await loadMonthData();
 };
 
+function onBdJumpRowClick(e) {
+  const row = e.target.closest('.bd-jump-row');
+  if (!row) return;
+  openBreakdownJumpModal(row.dataset.bdName, row.dataset.bdCat);
+}
+
 // ===== 集計タブ =====
 function renderSummary() {
   const totalInc = incomes.reduce((s,e) => s + (e.amount||0), 0);
@@ -3451,12 +3457,14 @@ function renderSummary() {
     if (entries.length === 0) {
       bdEl.innerHTML = badRow || '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">内訳データなし</div>';
     } else {
+      const escAttr = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
       bdEl.innerHTML = entries.map(([catId, cat], idx) => {
         const totalCount = Object.values(cat.items).reduce((s, v) => s + v.count, 0);
         const itemsHtml = Object.entries(cat.items)
           .sort((a, b) => b[1].total - a[1].total)
           .map(([name, v]) => `
-            <div class="stat-row" style="padding-left:12px;">
+            <div class="stat-row bd-jump-row" style="padding-left:12px;cursor:pointer;"
+              data-bd-name="${escAttr(name)}" data-bd-cat="${escAttr(catId)}">
               <span class="stat-label" style="font-size:12px;">${v.hasBad ? '👿 ' : ''}${name}（${v.count}件）</span>
               <span class="stat-value" style="color:${v.hasBad ? 'var(--bad)' : 'var(--expense)'};font-size:12px;">¥${v.total.toLocaleString()}</span>
             </div>
@@ -3475,6 +3483,7 @@ function renderSummary() {
           </div>
         `;
       }).join('') + badRow;
+      bdEl.addEventListener('click', onBdJumpRowClick);
     }
   }
 
@@ -5093,6 +5102,40 @@ window.drillDownExpFilter = (filter) => {
   renderExpenseTab();
 };
 
+window.openBreakdownJumpModal = (itemName, catId) => {
+  const matched = expenses.filter(e =>
+    (e.breakdowns || []).some(b =>
+      b.name === itemName && (b.bdCatGroupId || '__none__') === catId
+    )
+  ).sort((a, b) => b.date.localeCompare(a.date));
+  if (matched.length === 0) return;
+  if (matched.length === 1) {
+    switchTab('calendar');
+    setTimeout(() => selectDate(matched[0].date), 100);
+    return;
+  }
+  document.getElementById('bdJumpModalTitle').textContent = `${itemName}（${matched.length}件）`;
+  const listEl = document.getElementById('bdJumpList');
+  listEl.innerHTML = '';
+  matched.forEach(e => {
+    const shopDisplay = e.shop || e.memo || '（記載なし）';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;';
+    row.innerHTML = `
+      <span style="flex-shrink:0;color:var(--text2);font-size:12px;">${e.date.slice(5).replace('-','/')}</span>
+      <span style="flex-shrink:0;color:var(--expense);font-size:13px;font-weight:700;">¥${(e.amount||0).toLocaleString()}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;">${shopDisplay}</span>
+    `;
+    row.addEventListener('click', () => {
+      closeModal('bdJumpModal');
+      switchTab('calendar');
+      setTimeout(() => selectDate(e.date), 100);
+    });
+    listEl.appendChild(row);
+  });
+  openModal('bdJumpModal');
+};
+
 // ===== モーダル共通 =====
 function openModal(id) {
   document.querySelectorAll('.modal-overlay.open').forEach(el => {
@@ -5242,5 +5285,15 @@ const _dcDef = localStorage.getItem('deleteConfirmDefault') || 'cancel';
 const _dcRadio = document.querySelector(`input[name="deleteConfirmDefault"][value="${_dcDef}"]`);
 if (_dcRadio) _dcRadio.checked = true;
 </script>
+
+<div class="modal-overlay" id="bdJumpModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <div class="modal-title" id="bdJumpModalTitle"></div>
+      <button class="modal-close" onclick="closeModal('bdJumpModal')">×</button>
+    </div>
+    <div id="bdJumpList" style="overflow-y:auto;max-height:60vh;"></div>
+  </div>
+</div>
 </body>
 </html>
