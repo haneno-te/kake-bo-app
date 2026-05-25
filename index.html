@@ -220,6 +220,7 @@
     background: var(--card); border: 1px solid var(--border);
     border-radius: 8px; padding: 8px 10px; margin-bottom: 4px;
   }
+  .highlight-jump { outline: 2px solid var(--bad); outline-offset: -2px; }
   .exp-item-row1 {
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 2px;
@@ -1673,6 +1674,7 @@ const db = getFirestore(app);
 // ===== 状態 =====
 let currentYear, currentMonth;
 let selectedDate = null;
+let _highlightExpenseId = null;
 let expenses = [];
 let incomes = [];
 let accountTxs = [];    // 口座入出金ログ
@@ -1825,6 +1827,7 @@ window.selectedDate = null;
 
 // ===== 月移動 =====
 window.changeMonth = (delta) => {
+  _highlightExpenseId = null;
   currentMonth += delta;
   if (currentMonth > 12) { currentMonth = 1; currentYear++; }
   if (currentMonth < 1) { currentMonth = 12; currentYear--; }
@@ -1841,6 +1844,7 @@ function updateMonthLabel() {
 
 // ===== タブ切替 =====
 window.switchTab = (tabName) => {
+  _highlightExpenseId = null;
   // 離れるタブのアコーディオンをすべて閉じる
   document.querySelectorAll('.accordion-header.open').forEach(h => {
     h.classList.remove('open');
@@ -2332,7 +2336,7 @@ function buildExpenseCard(e, showActions = true) {
     <button class="btn-del" onclick="deleteExpense('${e.id}')">🗑️ 削除</button>
   </div>` : '';
 
-  return `<div class="record-item">
+  return `<div class="record-item${_highlightExpenseId === e.id ? ' highlight-jump' : ''}">
     <div class="record-top">
       <div class="record-left">
         <div class="record-category">${catName}${catName?' · ':''}${typeLabel}</div>
@@ -2519,7 +2523,7 @@ function buildExpenseCompact(e) {
   const row2Parts = [`<span class="pay-badge ${payBadgeClass}">${payLabel}</span>`, typeLabel];
   if (catName) row2Parts.push(catName);
 
-  return `<div class="exp-item">
+  return `<div class="exp-item${_highlightExpenseId === e.id ? ' highlight-jump' : ''}">
     <div class="exp-item-row1">
       <span class="exp-item-shop">${hasBad ? '👿 ' : ''}${shopDisplay}${noReceiptBadge}</span>
       <span class="exp-item-amount">¥${(e.amount||0).toLocaleString()}</span>
@@ -5102,6 +5106,18 @@ window.drillDownExpFilter = (filter) => {
   renderExpenseTab();
 };
 
+function setHighlight(id) {
+  _highlightExpenseId = id;
+  setTimeout(() => document.addEventListener('click', clearHighlight, { once: true }), 200);
+}
+
+function clearHighlight() {
+  if (_highlightExpenseId === null) return;
+  _highlightExpenseId = null;
+  if (selectedDate) renderDayPanel(selectedDate);
+  if (document.getElementById('tab-expenses').classList.contains('active')) renderExpenseTab();
+}
+
 window.openBreakdownJumpModal = (itemName, catId) => {
   const matched = expenses
     .map(e => {
@@ -5115,6 +5131,7 @@ window.openBreakdownJumpModal = (itemName, catId) => {
   if (matched.length === 0) return;
   if (matched.length === 1) {
     switchTab('calendar');
+    setHighlight(matched[0].e.id);
     setTimeout(() => selectDate(matched[0].e.date), 100);
     return;
   }
@@ -5133,6 +5150,7 @@ window.openBreakdownJumpModal = (itemName, catId) => {
     row.addEventListener('click', () => {
       closeModal('bdJumpModal');
       switchTab('calendar');
+      setHighlight(e.id);
       setTimeout(() => selectDate(e.date), 100);
     });
     listEl.appendChild(row);
