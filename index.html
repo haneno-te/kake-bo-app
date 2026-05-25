@@ -5168,23 +5168,21 @@ function openModal(id) {
   // アクティブ電卓リセット
   activeCalc = '';
   document.querySelectorAll('.calc-display.active').forEach(el => el.classList.remove('active'));
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      const sheet = modalEl.querySelector('.modal-sheet');
-      if (!sheet) return;
-      const firstCalc = sheet.querySelector('.calc-display');
-      if (firstCalc) {
-        const resultEl = firstCalc.querySelector('[id$="-calcResult"]');
-        if (resultEl) {
-          activeCalc = resultEl.id.replace('-calcResult', '');
-          firstCalc.classList.add('active');
-        }
-        sheet.scrollTop = Math.max(0, firstCalc.offsetTop - 20);
-      } else {
-        sheet.scrollTop = 0;
+  setTimeout(() => {
+    const sheet = modalEl.querySelector('.modal-sheet');
+    if (!sheet) return;
+    const firstCalc = sheet.querySelector('.calc-display');
+    if (firstCalc) {
+      const resultEl = firstCalc.querySelector('[id$="-calcResult"]');
+      if (resultEl) {
+        activeCalc = resultEl.id.replace('-calcResult', '');
+        firstCalc.classList.add('active');
       }
-    });
-  });
+      sheet.scrollTop = firstCalc.offsetTop - 20;
+    } else {
+      sheet.scrollTop = 0;
+    }
+  }, 50);
 }
 window.closeModal = (id) => {
   document.getElementById(id).classList.remove('open');
