@@ -790,38 +790,66 @@
       <span class="stat-label">収入合計</span>
       <span class="stat-value" style="color:var(--income);" id="statIncome">¥0</span>
     </div>
-    <div class="stat-row">
-      <span class="stat-label">支出合計（日々）</span>
-      <span class="stat-value" style="color:var(--expense);" id="statExpense">¥0</span>
+
+    <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;letter-spacing:0.05em;">今月 使った額</div>
+      <div class="stat-row">
+        <span class="stat-label">現金・振込・デビット</span>
+        <span class="stat-value" style="color:var(--expense);" id="statUsedCashTrans">¥0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">カード払い（今月分）</span>
+        <span class="stat-value" style="color:var(--expense);" id="statUsedCard">¥0</span>
+      </div>
+      <div class="stat-row" id="statUsedUnpaidRow" style="display:none;">
+        <span class="stat-label" style="padding-left:8px;font-size:11px;">うち未確定</span>
+        <span class="stat-value" style="color:var(--bad);font-size:11px;" id="statUsedUnpaid">¥0</span>
+      </div>
+      <div class="stat-row" style="border-top:1px solid var(--border);padding-top:6px;margin-top:2px;">
+        <span class="stat-label" style="font-weight:700;">合計</span>
+        <span class="stat-value" style="font-weight:700;color:var(--expense);" id="statUsedTotal">¥0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label" style="font-size:12px;">→ 収支（使った額ベース）</span>
+        <span class="stat-value" id="statBalanceUsed">¥0</span>
+      </div>
     </div>
-    <div class="stat-row" id="statFeeRow">
-      <span class="stat-label" style="padding-left:8px;font-size:11px;">うち銀行手数料</span>
-      <span class="stat-value" style="color:var(--bad);font-size:11px;" id="statFee">¥0</span>
+
+    <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px;letter-spacing:0.05em;">今月 出ていく額</div>
+      <div class="stat-row">
+        <span class="stat-label">現金</span>
+        <span class="stat-value" style="color:var(--expense);" id="statOutCash">¥0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">振込</span>
+        <span class="stat-value" style="color:var(--expense);" id="statOutTransfer">¥0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">デビット</span>
+        <span class="stat-value" style="color:var(--expense);" id="statOutDebit">¥0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">カード確定（今月分）</span>
+        <span class="stat-value" style="color:var(--expense);" id="statOutCard">¥0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">カード確定（過月分）</span>
+        <span class="stat-value" style="color:var(--expense);" id="statOutCardPast">¥0</span>
+      </div>
+      <div class="stat-row" style="border-top:1px solid var(--border);padding-top:6px;margin-top:2px;">
+        <span class="stat-label" style="font-weight:700;">合計</span>
+        <span class="stat-value" style="font-weight:700;color:var(--expense);" id="statOutTotal">¥0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label" style="font-size:12px;">→ 収支（出ていく額ベース）</span>
+        <span class="stat-value" id="statBalanceOut">¥0</span>
+      </div>
     </div>
-    <div class="stat-row" id="statInstallFeeRow">
-      <span class="stat-label" style="padding-left:8px;font-size:11px;">うち分割手数料</span>
-      <span class="stat-value" style="color:var(--bad);font-size:11px;" id="statInstallFee">¥0</span>
-    </div>
-    <div class="stat-row">
-      <span class="stat-label">カード引き落とし確定</span>
-      <span class="stat-value" style="color:var(--expense);" id="statCard">¥0</span>
-    </div>
-    <div class="stat-row" style="opacity:0.7;">
+
+    <div class="stat-row" style="opacity:0.7;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
       <span class="stat-label" style="font-size:12px;">参考：今月の固定項目分</span>
       <span class="stat-value" id="statFixed" style="font-size:12px;color:var(--text2);">¥0</span>
-    </div>
-    <div class="stat-row" style="border-top:1px solid var(--accent);padding-top:10px;margin-top:4px;">
-      <span class="stat-label" style="font-weight:700;">収支差引</span>
-      <span class="stat-value" style="font-size:18px;" id="statBalance">¥0</span>
-    </div>
-    <div id="statRealBalanceBox" style="margin-top:8px;padding:10px;border-radius:8px;background:rgba(255,159,67,0.12);border:1px solid var(--bad);">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <div style="font-size:12px;font-weight:700;color:var(--text1);">実質収支（未払い残高を差し引き）</div>
-          <div style="font-size:10px;color:var(--text2);margin-top:2px;" id="statRealBalanceDetail">収支 ¥0 − 未払い残高 ¥0</div>
-        </div>
-        <span id="statRealBalance" style="font-size:18px;font-weight:700;">¥0</span>
-      </div>
     </div>
   </div>
 
@@ -1675,6 +1703,7 @@ const db = getFirestore(app);
 let currentYear, currentMonth;
 let selectedDate = null;
 let _highlightExpenseId = null;
+let _prevMonthIncome = 0;
 let expenses = [];
 let incomes = [];
 let accountTxs = [];    // 口座入出金ログ
@@ -2079,6 +2108,65 @@ function calcMonthCardSettled(ym) {
       .reduce((s, c) => s + (c.total||0), 0);
 }
 
+function calcMonthSummary(ym, prevMonthIncome = 0) {
+  const ymStart = ym + '-01';
+  const [yr, mo] = ym.split('-').map(Number);
+  const nextM = mo === 12 ? `${yr+1}-01-01` : `${yr}-${String(mo+1).padStart(2,'0')}-01`;
+
+  const totalInc = incomes.reduce((s, e) => s + (e.amount || 0), 0);
+
+  const isDebitCard = (e) => {
+    if (e.payMethod !== 'card') return false;
+    const acc = settings.accounts.find(a => a.id === e.accountId);
+    return !!acc?.isDebit;
+  };
+
+  // 今月使った額
+  const usedCashTrans = expenses
+    .filter(e => e.payMethod === 'cash' || e.payMethod === 'transfer' || isDebitCard(e))
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  const usedCard = expenses
+    .filter(e => e.payMethod === 'card' && !isDebitCard(e))
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  const usedCardUnpaid = cardPools
+    .filter(p => p.date >= ymStart && p.date < nextM && !p.confirmedMonth)
+    .reduce((s, p) => s + calcPoolUnpaid(p), 0);
+  const usedTotal = usedCashTrans + usedCard;
+  const balanceUsed = totalInc - usedTotal;
+
+  // 今月出ていく額
+  const outCash = expenses
+    .filter(e => e.payMethod === 'cash')
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  const outTransfer = expenses
+    .filter(e => e.payMethod === 'transfer')
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  const outDebit = expenses
+    .filter(e => isDebitCard(e))
+    .reduce((s, e) => s + (e.amount || 0), 0);
+
+  const poolAmt = p => p.installType === 'installment' ? (p.installAmt || 0) : (p.amount || 0);
+  const confirmedPools = cardPools.filter(p => p.confirmedMonth === ym);
+  // Pools whose purchase was in this month
+  const outCard = confirmedPools
+    .filter(p => p.date >= ymStart && p.date < nextM)
+    .reduce((s, p) => s + poolAmt(p), 0);
+  // Pools from past months + all cardConfirmed records (treat as past conservatively)
+  const outCardPast = confirmedPools
+    .filter(p => !p.date || p.date < ymStart)
+    .reduce((s, p) => s + poolAmt(p), 0)
+    + cardConfirmed.reduce((s, c) => s + (c.total || 0), 0);
+
+  const outTotal = outCash + outTransfer + outDebit + outCard + outCardPast;
+  const balanceOut = totalInc - outTotal;
+
+  return {
+    totalInc,
+    usedCashTrans, usedCard, usedCardUnpaid, usedTotal, balanceUsed,
+    outCash, outTransfer, outDebit, outCard, outCardPast, outTotal, balanceOut,
+  };
+}
+
 function calcTotalAsset() {
   return settings.accounts
     .filter(a => !a.excludeFromTotal)
@@ -2152,6 +2240,7 @@ async function loadMonthData() {
     if (data.month === ym) cardBillingOverrides.push(data);
   });
 
+  _prevMonthIncome = prevMonthIncome;
   renderCalendar();
   renderSummaryBar(prevMonthIncome);
   renderExpenseTab();
@@ -3345,43 +3434,53 @@ function onBdJumpRowClick(e) {
 
 // ===== 集計タブ =====
 function renderSummary() {
-  const totalInc = incomes.reduce((s,e) => s + (e.amount||0), 0);
-  const totalExp = expenses.reduce((s,e) => s + (e.amount||0), 0);
-  const totalCard = cardConfirmed.reduce((s,c) => s + (c.total||0), 0) +
-    cardPools.filter(c => c.confirmedMonth === currentYM()).reduce((s,c) =>
-      s + (c.installType === 'installment' ? (c.installAmt||0) : (c.amount||0)), 0);
   const ym = currentYM();
   const ymStart = ym + '-01';
   const nextM = currentMonth === 12
     ? `${currentYear+1}-01-01`
     : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
-  const totalFixed = fixedCosts.reduce((s,f) => {
+
+  const ms = calcMonthSummary(ym, _prevMonthIncome);
+
+  // Keep totalExp for downstream calculations (workRatio, catBreakdown, etc.)
+  const totalExp = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const totalFixed = fixedCosts.reduce((s, f) => {
     if (f.payMethod === 'card') {
       return s + cardPools
         .filter(p => p.fixedCostId === f.id && p.month === ym)
-        .reduce((a,p) => a + (p.installType === 'installment' ? (p.installAmt||0) : (p.amount||0)), 0);
+        .reduce((a, p) => a + (p.installType === 'installment' ? (p.installAmt || 0) : (p.amount || 0)), 0);
     } else if (f.payMethod === 'transfer' || f.payMethod === 'cash') {
       return s + expenses
         .filter(e => e.fixedCostId === f.id && e.date >= ymStart && e.date < nextM)
-        .reduce((a,e) => a + (e.amount||0), 0);
+        .reduce((a, e) => a + (e.amount || 0), 0);
     }
     return s;
   }, 0);
-  const balance = totalInc - totalExp - totalCard;
 
-  const totalFee = expenses.filter(e => e.memo === '銀行手数料').reduce((s,e) => s + (e.amount||0), 0);
-  const totalInstallFee = expenses.filter(e => e.memo === '分割手数料').reduce((s,e) => s + (e.amount||0), 0);
-  document.getElementById('statIncome').textContent = '¥' + totalInc.toLocaleString();
-  document.getElementById('statExpense').textContent = '¥' + totalExp.toLocaleString();
-  document.getElementById('statFee').textContent = '¥' + totalFee.toLocaleString();
-  document.getElementById('statFeeRow').style.display = totalFee > 0 ? 'flex' : 'none';
-  document.getElementById('statInstallFee').textContent = '¥' + totalInstallFee.toLocaleString();
-  document.getElementById('statInstallFeeRow').style.display = totalInstallFee > 0 ? 'flex' : 'none';
-  document.getElementById('statCard').textContent = '¥' + totalCard.toLocaleString();
-  document.getElementById('statFixed').textContent = '¥' + totalFixed.toLocaleString();
-  const balEl = document.getElementById('statBalance');
-  balEl.textContent = (balance >= 0 ? '+' : '') + '¥' + balance.toLocaleString();
-  balEl.style.color = balance >= 0 ? 'var(--income)' : 'var(--expense)';
+  const fmtAmt = n => '¥' + n.toLocaleString();
+  const fmtBal = n => (n >= 0 ? '+' : '') + fmtAmt(n);
+  const colorBal = n => n >= 0 ? 'var(--income)' : 'var(--expense)';
+
+  document.getElementById('statIncome').textContent = fmtAmt(ms.totalInc);
+  document.getElementById('statUsedCashTrans').textContent = fmtAmt(ms.usedCashTrans);
+  document.getElementById('statUsedCard').textContent = fmtAmt(ms.usedCard);
+  const unpaidRow = document.getElementById('statUsedUnpaidRow');
+  unpaidRow.style.display = ms.usedCardUnpaid > 0 ? 'flex' : 'none';
+  document.getElementById('statUsedUnpaid').textContent = fmtAmt(ms.usedCardUnpaid);
+  document.getElementById('statUsedTotal').textContent = fmtAmt(ms.usedTotal);
+  const balUsedEl = document.getElementById('statBalanceUsed');
+  balUsedEl.textContent = fmtBal(ms.balanceUsed);
+  balUsedEl.style.color = colorBal(ms.balanceUsed);
+  document.getElementById('statOutCash').textContent = fmtAmt(ms.outCash);
+  document.getElementById('statOutTransfer').textContent = fmtAmt(ms.outTransfer);
+  document.getElementById('statOutDebit').textContent = fmtAmt(ms.outDebit);
+  document.getElementById('statOutCard').textContent = fmtAmt(ms.outCard);
+  document.getElementById('statOutCardPast').textContent = fmtAmt(ms.outCardPast);
+  document.getElementById('statOutTotal').textContent = fmtAmt(ms.outTotal);
+  const balOutEl = document.getElementById('statBalanceOut');
+  balOutEl.textContent = fmtBal(ms.balanceOut);
+  balOutEl.style.color = colorBal(ms.balanceOut);
+  document.getElementById('statFixed').textContent = fmtAmt(totalFixed);
 
   const workExp = expenses.filter(e => e.type === 'work').reduce((s,e) => s + (e.amount||0), 0);
   const privExp = expenses.filter(e => e.type !== 'work').reduce((s,e) => s + (e.amount||0), 0);
@@ -3507,17 +3606,6 @@ function renderSummary() {
   const settledConfirmedAmt = cardConfirmed.reduce((s, c) => s + (c.total || 0), 0);
   const settledTotal = settledFromPoolsAmt + settledConfirmedAmt;
   const settledCount = settledFromPools.length + cardConfirmed.length;
-
-  const realBalance = balance - unpaidTotal;
-  const realBalEl = document.getElementById('statRealBalance');
-  const realBalDetailEl = document.getElementById('statRealBalanceDetail');
-  if (realBalEl) {
-    realBalEl.textContent = (realBalance >= 0 ? '+' : '') + '¥' + realBalance.toLocaleString();
-    realBalEl.style.color = realBalance >= 0 ? 'var(--bad)' : 'var(--expense)';
-  }
-  if (realBalDetailEl) {
-    realBalDetailEl.textContent = `収支 ¥${balance.toLocaleString()} − 未払い残高 ¥${unpaidTotal.toLocaleString()}`;
-  }
 
   const getCardName = c => settings.cards.find(card => card.id === c.cardId)?.name || 'カード不明';
   const unpaidItemRow = c => {
