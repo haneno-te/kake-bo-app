@@ -1073,7 +1073,7 @@
           🗑️ 検出された <span id="healthDeleteCount">0</span>件 を一括削除
         </button>
         <div style="font-size:11px;color:var(--text2);margin-top:6px;text-align:center;">
-          ※ account_txs の孤立は対象外（手動で確認してください）
+          ※ account_txs の孤立、および ⚠️参考警告（A1w・A12・B2w）は対象外（手動で確認してください）
         </div>
       </div>
     </div>
@@ -2127,8 +2127,8 @@ function calcMonthSummary(ym, prevMonthIncome = 0) {
 
   const isDebitCard = (e) => {
     if (e.payMethod !== 'card') return false;
-    const acc = settings.accounts.find(a => a.id === e.accountId);
-    return !!acc?.isDebit;
+    const card = settings.cards.find(c => c.id === e.cardId);
+    return !!card?.isDebit;
   };
 
   // 今月使った額
@@ -3240,7 +3240,18 @@ window.saveFixedPay = async () => {
   const ym = currentYM();
   const date = ym + '-01';
 
+  // 同月二重登録防止（表示上のボタン出し分けとは別に保存直前でも再チェック）
+  if (cardPools.some(p => p.fixedCostId === id && p.month === ym)) {
+    showToast('今月分はすでに登録済みです');
+    closeModal('fixedPayModal');
+    return;
+  }
+
   if (f.payMethod === 'card') {
+    if (!f.payCardId) {
+      alert('この固定費にカードが設定されていません。固定費の編集でカードを選択してください。');
+      return;
+    }
     await addDoc(collection(db, 'card_pools'), {
       amount, date, cardId: f.payCardId, memo: f.name,
       installType: 'once', fixedCostId: f.id, month: ym
@@ -3304,6 +3315,7 @@ window.saveFixed = async () => {
   const payDay = parseInt(document.getElementById('fix-payDay').value) || null;
   const payMethod = currentFixPayMethod || null;
   const payCardId = payMethod === 'card' ? (document.getElementById('fix-payCardId').value || null) : null;
+  if (payMethod === 'card' && !payCardId) { alert('支払い方法がカードの場合はカードを選択してください'); return; }
   const payAccountId = payMethod === 'transfer' ? (document.getElementById('fix-payAccountId').value || null) : null;
   const data = { name, amount, actualAmount, fixedType, kind: currentFixKind, payDay, payMethod, payCardId, payAccountId };
 
@@ -3325,6 +3337,7 @@ window.saveFixed = async () => {
     cpSnap.forEach(d => {
       const r = { id: d.id, ...d.data() };
       if (r.fixedCostId !== editingFixedId) return;
+      if (r.confirmedMonth) return; // 確定済み（支払い済み）プールは編集対象外（unregisterFixed と同じ扱い）
       if ((r.month === ym) || (!r.month && r.date && r.date.startsWith(ym))) curCp.push(r);
     });
     const curExp = [];
@@ -3829,7 +3842,7 @@ window.saveExpense = async () => {
         // 両方通常カード
         const oldPool = cardPools.find(p => p.expenseId === editingExpenseId);
         if (oldCardId === newCardId) {
-          if (oldPool) await updateDoc(doc(db, 'card_pools', oldPool.id), { amount, memo: _expMemo });
+          if (oldPool) await updateDoc(doc(db, 'card_pools', oldPool.id), { amount, memo: _expMemo, date });
         } else {
           if (oldPool) {
             const linkedConfirmed = await getDocs(query(collection(db, 'card_confirmed'), where('poolId', '==', oldPool.id)));
@@ -3975,15 +3988,19 @@ window.deleteExpense = (id) => {
       for (const t of linked) await deleteDoc(doc(db, 'account_txs', t.id));
     }
     if (expense?.fixedCostId && !(expense.memo || '').includes('振込手数料')) {
+      // 削除対象支出と同じ月の手数料記録のみ連動削除（expenses / account_txs で範囲を統一）
+      const expYM = (expense.date || '').slice(0, 7);
       const feeExps = expenses.filter(e =>
         e.id !== id &&
         e.fixedCostId === expense.fixedCostId &&
-        (e.memo || '').includes('振込手数料')
+        (e.memo || '').includes('振込手数料') &&
+        expYM && (e.date || '').startsWith(expYM)
       );
       for (const fe of feeExps) await deleteDoc(doc(db, 'expenses', fe.id));
       const feeTxs = accountTxs.filter(t =>
         t.fixedCostId === expense.fixedCostId &&
-        (t.memo || '').includes('振込手数料')
+        (t.memo || '').includes('振込手数料') &&
+        expYM && (t.date || '').startsWith(expYM)
       );
       for (const ft of feeTxs) await deleteDoc(doc(db, 'account_txs', ft.id));
     }
@@ -4088,6 +4105,9 @@ window.openIncomeModal = (id = null, date = null) => {
     document.getElementById('inc-typeId').value = e.typeId || '';
     document.getElementById('inc-accountId').value = e.accountId || '';
     document.getElementById('inc-memo').value = e.memo || '';
+    // 既存の紐付き入金ログの金額をプリフィル（未設定なら空欄＝収入金額と同額）
+    const linkedTx = accountTxs.find(t => t.incomeId === id);
+    document.getElementById('inc-accountAmt').value = linkedTx ? (linkedTx.amount || '') : '';
     document.getElementById('incAccountAmtWrap').style.display = e.accountId ? 'block' : 'none';
   } else {
     calcSet('inc', '');
@@ -4095,6 +4115,7 @@ window.openIncomeModal = (id = null, date = null) => {
     document.getElementById('inc-typeId').value = '';
     document.getElementById('inc-accountId').value = '';
     document.getElementById('inc-memo').value = '';
+    document.getElementById('inc-accountAmt').value = '';
     document.getElementById('incAccountAmtWrap').style.display = 'none';
   }
   openModal('incomeModal');
@@ -4147,12 +4168,8 @@ window.deleteIncome = (id) => {
   showConfirm('この収入記録を削除しますか？', async () => {
     const income = incomes.find(x => x.id === id);
     await deleteDoc(doc(db, 'income', id));
-    if (income && income.accountId) {
-      const linked = accountTxs.filter(t =>
-        t.incomeId === id ||
-        (t.accountId === income.accountId && t.txType === 'transfer_in' &&
-         t.date === income.date && (t.memo||'').startsWith('収入：'))
-      );
+    if (income) {
+      const linked = accountTxs.filter(t => t.incomeId === id);
       for (const t of linked) {
         await deleteDoc(doc(db, 'account_txs', t.id));
       }
@@ -4170,6 +4187,34 @@ window.toggleIncomeIncludeInPrev = async (id, checked) => {
 
 // ===== 口座入出金CRUD =====
 window.openAccountTxModal = (id = null, date = null, accountId = null, txType = null) => {
+  // 紐付けキーを持つ自動生成 tx は直接編集不可（deleteAccountTx と同じ6キー判定）
+  if (id) {
+    const t = accountTxs.find(x => x.id === id);
+    if (t?.incomeId) {
+      alert('この記録は収入から自動生成されたものです。収入タブで親データを編集してください。');
+      return;
+    }
+    if (t?.debitExpenseId) {
+      alert('この記録はデビットカード支出から自動生成されたものです。支出タブで親データを編集してください。');
+      return;
+    }
+    if (t?.expenseId) {
+      alert('この記録は振込支出から自動生成されたものです。支出タブで親データを編集してください。');
+      return;
+    }
+    if (t?.fixedCostId) {
+      alert('この記録は固定費から自動生成されたものです。固定費タブで親データを編集してください。');
+      return;
+    }
+    if (t?.withdrawTxId) {
+      alert('この記録は引き下ろしに連動した自動入金です。元の引き下ろし記録を編集してください。');
+      return;
+    }
+    if (t?.parentTxId) {
+      alert('この記録は手数料です。元の取引（振込・引き下ろし・移動）側から管理されます。直接編集はできません。');
+      return;
+    }
+  }
   editingAccountTxId = id;
   document.getElementById('accountTxTitle').textContent = id ? '口座入出金を編集' : '口座 入出金';
   if (id) {
@@ -4865,14 +4910,16 @@ window.runHealthCheck = async () => {
   const txMap  = new Map(); txSnap.forEach(d =>  txMap.set(d.id, { id: d.id, ...d.data() }));
 
   // A1: card_pools の孤立検査（expenseId/fixedCostId 欠落 or 参照切れ）
+  // ID紐付けなしはレガシーデータ（分割等）の可能性があるため参考警告のみ（一括削除対象外）
   const issuesA1 = [];
+  const issuesA1Warn = [];
   cpMap.forEach(cp => {
     if (cp.expenseId && !expMap.has(cp.expenseId)) {
       issuesA1.push({ ...cp, reason: `expenseId="${cp.expenseId.substring(0,8)}" が expenses に存在しない` });
       return;
     }
     if (!cp.expenseId && !cp.fixedCostId) {
-      issuesA1.push({ ...cp, reason: 'expenseId / fixedCostId のいずれも持たない孤立データ' });
+      issuesA1Warn.push({ ...cp, reason: 'expenseId / fixedCostId のいずれも持たない（レガシー分割等の可能性・一括削除対象外）' });
     }
   });
 
@@ -4947,10 +4994,14 @@ window.runHealthCheck = async () => {
   });
 
   // A12: card_confirmed.poolId → card_pools
+  // 分割の最終回確定でプールは削除される仕様のため、参照切れ＝完済履歴の可能性あり。
+  // 全件を参考警告のみとし、一括削除対象から除外する
   const issuesA12 = [];
   ccMap.forEach(cc => {
     if (!cc.poolId || !cpMap.has(cc.poolId))
-      issuesA12.push({ ...cc, reason: cc.poolId ? `poolId="${cc.poolId.substring(0,8)}" が card_pools に存在しない` : 'poolId なし' });
+      issuesA12.push({ ...cc, reason: cc.poolId
+        ? `poolId="${cc.poolId.substring(0,8)}" が card_pools に存在しない（分割完済の可能性・一括削除対象外）`
+        : 'poolId なし（分割完済の可能性・一括削除対象外）' });
   });
 
   // A13: 逆方向 - クレジットカード支出 → card_pools（expenseId）
@@ -4985,20 +5036,30 @@ window.runHealthCheck = async () => {
   });
 
   // B2: card_pools vs fixed_costs amount 乖離
+  // 固定費の金額改定で過去月のプールは正当に乖離するため、
+  // 確定済み・過去月（実際の今日の月を基準）は参考警告のみ（一括削除対象外）
   const issuesB2 = [];
+  const issuesB2Warn = [];
+  const realTodayYM = todayStr().slice(0, 7);
   cpMap.forEach(cp => {
     if (!cp.fixedCostId) return;
     const fc = fcMap.get(cp.fixedCostId);
     if (!fc) return;
     const fcAmt = fc.actualAmount ?? fc.amount ?? 0;
-    if ((cp.amount || 0) !== fcAmt)
-      issuesB2.push({ ...cp, reason: `card_pools.amount=${cp.amount} vs fixed_costs.amount=${fcAmt}` });
+    if ((cp.amount || 0) !== fcAmt) {
+      const poolYM = cp.month || (cp.date || '').slice(0, 7);
+      if (cp.confirmedMonth || (poolYM && poolYM < realTodayYM)) {
+        issuesB2Warn.push({ ...cp, reason: `card_pools.amount=${cp.amount} vs fixed_costs.amount=${fcAmt}（確定済み／過去月のため参考警告・一括削除対象外）` });
+      } else {
+        issuesB2.push({ ...cp, reason: `card_pools.amount=${cp.amount} vs fixed_costs.amount=${fcAmt}` });
+      }
+    }
   });
 
-  const totalIssues = issuesA1.length + issuesA2.length + issuesA3.length + issuesA4.length +
+  const totalIssues = issuesA1.length + issuesA1Warn.length + issuesA2.length + issuesA3.length + issuesA4.length +
     issuesA5.length + issuesA6.length + issuesA7.length + issuesA8.length + issuesA9.length +
     issuesA10.length + issuesA11.length + issuesA12.length + issuesA13.length + issuesA14.length +
-    issuesB1.length + issuesB2.length;
+    issuesB1.length + issuesB2.length + issuesB2Warn.length;
 
   const short = id => (id || '').substring(0, 8);
   const fmtAmt = n => (n ?? 0).toLocaleString() + '円';
@@ -5036,6 +5097,7 @@ window.runHealthCheck = async () => {
       <div style="margin-top:4px;font-size:11px;color:var(--text2);margin-bottom:8px;">紐付けIDベースの双方向検査 v2</div>
       <div style="font-size:12px;font-weight:bold;color:var(--text2);margin:8px 0 4px;">─ カテゴリA：参照先の存在確認 ─</div>
       ${statRow('A1: card_pools.expenseId → expenses', issuesA1.length, '未払いプールの expenseId が指す支出が存在しない')}
+      ${statRow('A1w: ⚠️ ID紐付けなしプール（参考警告）', issuesA1Warn.length, 'レガシー分割等の可能性。一括削除対象外')}
       ${statRow('A2: expenses.cardPoolId → card_pools', issuesA2.length, '支出の cardPoolId が指すプールが存在しない')}
       ${statRow('A3: card_pools.fixedCostId → fixed_costs', issuesA3.length, '未払いプールの fixedCostId が fixed_costs に存在しない')}
       ${statRow('A4: account_txs.incomeId → income', issuesA4.length, '口座記録の incomeId が income に存在しない')}
@@ -5046,16 +5108,18 @@ window.runHealthCheck = async () => {
       ${statRow('A9: account_txs.parentTxId → account_txs', issuesA9.length, '手数料 tx の parentTxId が account_txs に存在しない')}
       ${statRow('A10: expenses.parentTxId → account_txs', issuesA10.length, '手数料支出の parentTxId が account_txs に存在しない')}
       ${statRow('A11: account_txs.debitExpenseId → expenses', issuesA11.length, 'デビット口座記録の debitExpenseId が expenses に存在しない')}
-      ${statRow('A12: card_confirmed.poolId → card_pools', issuesA12.length, '確定済み記録の poolId が card_pools に存在しない')}
+      ${statRow('A12: ⚠️ card_confirmed.poolId → card_pools（参考警告）', issuesA12.length, '分割完済の可能性あり。一括削除対象外')}
       ${statRow('A13: クレジット支出 → card_pools（逆方向）', issuesA13.length, 'カード払い支出を expenseId で参照する card_pools が存在しない')}
       ${statRow('A14: デビット支出 → account_txs（逆方向）', issuesA14.length, 'デビット支出を debitExpenseId で参照する account_txs が存在しない')}
       <div style="font-size:12px;font-weight:bold;color:var(--text2);margin:8px 0 4px;">─ カテゴリB：金額乖離確認 ─</div>
       ${statRow('B1: card_pools vs expenses 金額乖離', issuesB1.length, '紐付く支出と未払いプールの金額が一致しない')}
       ${statRow('B2: card_pools vs fixed_costs 金額乖離', issuesB2.length, '紐付く固定費と未払いプールの金額が一致しない')}
+      ${statRow('B2w: ⚠️ 金額乖離・確定済み／過去月（参考警告）', issuesB2Warn.length, '固定費の金額改定による正当な乖離の可能性。一括削除対象外')}
     </div>`;
 
   resultEl.innerHTML = summary
     + makeDetail('A1: card_pools.expenseId → expenses 欠落', 'card_pools', issuesA1, cpFields)
+    + makeDetail('A1w: ⚠️ ID紐付けなしプール（参考警告・一括削除対象外）', 'card_pools', issuesA1Warn, cpFields)
     + makeDetail('A2: expenses.cardPoolId → card_pools 欠落', 'expenses', issuesA2, expFields)
     + makeDetail('A3: card_pools.fixedCostId → fixed_costs 欠落', 'card_pools', issuesA3, cpFields)
     + makeDetail('A4: account_txs.incomeId → income 欠落', 'account_txs', issuesA4, txFields)
@@ -5066,11 +5130,12 @@ window.runHealthCheck = async () => {
     + makeDetail('A9: account_txs.parentTxId → account_txs 欠落', 'account_txs', issuesA9, txFields)
     + makeDetail('A10: expenses.parentTxId → account_txs 欠落', 'expenses', issuesA10, expFields)
     + makeDetail('A11: account_txs.debitExpenseId → expenses 欠落', 'account_txs', issuesA11, txFields)
-    + makeDetail('A12: card_confirmed.poolId → card_pools 欠落', 'card_confirmed', issuesA12, ccFields)
+    + makeDetail('A12: ⚠️ card_confirmed.poolId → card_pools 欠落（参考警告・一括削除対象外）', 'card_confirmed', issuesA12, ccFields)
     + makeDetail('A13: クレジット支出 → card_pools 欠落（逆方向）', 'expenses', issuesA13, expFields)
     + makeDetail('A14: デビット支出 → account_txs 欠落（逆方向）', 'expenses', issuesA14, expFields)
     + makeDetail('B1: card_pools vs expenses 金額乖離', 'card_pools', issuesB1, cpFields)
-    + makeDetail('B2: card_pools vs fixed_costs 金額乖離', 'card_pools', issuesB2, cpFields);
+    + makeDetail('B2: card_pools vs fixed_costs 金額乖離', 'card_pools', issuesB2, cpFields)
+    + makeDetail('B2w: ⚠️ 金額乖離・確定済み／過去月（参考警告・一括削除対象外）', 'card_pools', issuesB2Warn, cpFields);
 
   // 削除対象を集約（account_txs は除外）
   _healthCheckIssues = [
@@ -5079,7 +5144,7 @@ window.runHealthCheck = async () => {
     ...issuesA3.map(r => ({ col: 'card_pools',    id: r.id, reason: 'A3: ' + r.reason })),
     ...issuesA7.map(r => ({ col: 'expenses',       id: r.id, reason: 'A7: ' + r.reason })),
     ...issuesA10.map(r => ({ col: 'expenses',      id: r.id, reason: 'A10: ' + r.reason })),
-    ...issuesA12.map(r => ({ col: 'card_confirmed', id: r.id, reason: 'A12: ' + r.reason })),
+    // A12 は分割完済の可能性があるため一括削除対象外（参考警告のみ）
     ...issuesA13.map(r => ({ col: 'expenses',      id: r.id, reason: 'A13: ' + r.reason })),
     ...issuesA14.map(r => ({ col: 'expenses',      id: r.id, reason: 'A14: ' + r.reason })),
     ...issuesB1.map(r => ({ col: 'card_pools',    id: r.id, reason: 'B1: ' + r.reason })),
