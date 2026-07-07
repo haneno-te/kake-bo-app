@@ -672,12 +672,20 @@
     <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;
       display:flex;align-items:center;justify-content:center;gap:6px;
       font-size:12px;flex-wrap:wrap;">
-      <span style="color:var(--text2);">前月収入</span>
-      <span style="color:var(--income);font-weight:700;" id="cal-prevIncome">¥0</span>
+      <span style="color:var(--text2);">今月予算</span>
+      <span style="color:var(--income);font-weight:700;" id="cal-monthBudget">¥0</span>
       <span style="color:var(--text2);">－ 今月支出</span>
       <span style="color:var(--expense);font-weight:700;" id="cal-sumExpense2">¥0</span>
       <span style="color:var(--text2);">=</span>
       <span style="font-weight:700;font-size:13px;" id="cal-carryBalance">¥0</span>
+    </div>
+    <div style="margin-top:4px;display:flex;align-items:center;justify-content:center;gap:8px;
+      font-size:11px;flex-wrap:wrap;color:var(--text2);">
+      <span>今月予算内訳：</span>
+      <span>前月収入</span>
+      <span style="color:var(--income);font-weight:700;" id="cal-prevIncome">¥0</span>
+      <span>＋ 今月使用分</span>
+      <span style="color:var(--income);font-weight:700;" id="cal-currIncomeUnchecked">¥0</span>
     </div>
     <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;
       display:flex;align-items:center;justify-content:center;gap:6px;
@@ -735,20 +743,21 @@
 
 <!-- 収入タブ -->
 <div class="tab-content" id="tab-income">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
     <div style="font-size:13px;font-weight:700;">今月の収入</div>
     <div style="font-size:16px;font-weight:700;color:var(--income);" id="incMonthTotalTop">¥0</div>
+  </div>
+  <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;
+    margin-bottom:8px;font-size:11px;color:var(--text2);">
+    <span>内訳：◽️今月使用分</span>
+    <span style="color:var(--income);font-weight:700;" id="incomeMonthCurrent">¥0</span>
+    <span>／ ✅来月使用分</span>
+    <span style="color:var(--income);font-weight:700;" id="incomeMonthTotal">¥0</span>
   </div>
   <div style="text-align:right;margin-bottom:10px;">
     <button class="btn-sm inc" onclick="openIncomeModal()">＋ 追加</button>
   </div>
   <div id="incomeList"><div class="loading">データなし</div></div>
-  <div class="card" style="margin-top:8px;">
-    <div class="stat-row">
-      <span class="stat-label">✅収入合計</span>
-      <span class="stat-value" style="color:var(--income);" id="incomeMonthTotal">¥0</span>
-    </div>
-  </div>
 </div>
 
 <!-- 口座タブ -->
@@ -1704,6 +1713,7 @@ let currentYear, currentMonth;
 let selectedDate = null;
 let _highlightExpenseId = null;
 let _prevMonthIncome = 0;
+let _currMonthIncomeUnchecked = 0;
 let expenses = [];
 let incomes = [];
 let accountTxs = [];    // 口座入出金ログ
@@ -2207,9 +2217,13 @@ async function loadMonthData() {
 
   incomes = [];
   let prevMonthIncome = 0;
+  let currMonthIncomeUnchecked = 0;
   incSnap.forEach(d => {
     const data = { id: d.id, ...d.data() };
-    if (data.date >= ymStart && data.date < nextMonth) incomes.push(data);
+    if (data.date >= ymStart && data.date < nextMonth) {
+      incomes.push(data);
+      if (data.includeInPrev === false) currMonthIncomeUnchecked += data.amount || 0;
+    }
     if (data.date >= prevYmStart && data.date < ymStart) {
       if (data.includeInPrev !== false) prevMonthIncome += data.amount || 0;
     }
@@ -2241,8 +2255,9 @@ async function loadMonthData() {
   });
 
   _prevMonthIncome = prevMonthIncome;
+  _currMonthIncomeUnchecked = currMonthIncomeUnchecked;
   renderCalendar();
-  renderSummaryBar(prevMonthIncome);
+  renderSummaryBar(prevMonthIncome, currMonthIncomeUnchecked);
   renderExpenseTab();
   renderIncomeTab();
   renderCardTab();
@@ -2501,7 +2516,7 @@ function buildAccountTxCard(t, showActions = true) {
 }
 
 // ===== サマリーバー =====
-function renderSummaryBar(prevMonthIncome = 0) {
+function renderSummaryBar(prevMonthIncome = 0, currMonthIncomeUnchecked = 0) {
   const totalExp = expenses.reduce((s,e) => s + (e.amount||0), 0);
   const totalInc = incomes.reduce((s,e) => s + (e.amount||0), 0);
   const totalBad = expenses.reduce((s,e) => {
@@ -2513,7 +2528,10 @@ function renderSummaryBar(prevMonthIncome = 0) {
   document.getElementById('cal-sumBad').textContent = '¥' + totalBad.toLocaleString();
   document.getElementById('cal-sumExpense2').textContent = '¥' + totalExp.toLocaleString();
   document.getElementById('cal-prevIncome').textContent = '¥' + prevMonthIncome.toLocaleString();
-  const balance = prevMonthIncome - totalExp;
+  document.getElementById('cal-currIncomeUnchecked').textContent = '¥' + currMonthIncomeUnchecked.toLocaleString();
+  const monthBudget = prevMonthIncome + currMonthIncomeUnchecked;
+  document.getElementById('cal-monthBudget').textContent = '¥' + monthBudget.toLocaleString();
+  const balance = monthBudget - totalExp;
   const balEl = document.getElementById('cal-carryBalance');
   balEl.textContent = (balance >= 0 ? '+' : '') + '¥' + balance.toLocaleString();
   balEl.style.color = balance >= 0 ? 'var(--income)' : 'var(--expense)';
@@ -2640,7 +2658,10 @@ function renderIncomeTab() {
   }
   const incTotal = incomes.reduce((s,e) => s + (e.amount||0), 0);
   const incTotalInPrev = incomes.filter(e => e.includeInPrev !== false).reduce((s,e) => s + (e.amount||0), 0);
+  const incTotalCurrent = incomes.filter(e => e.includeInPrev === false).reduce((s,e) => s + (e.amount||0), 0);
   document.getElementById('incomeMonthTotal').textContent = '¥' + incTotalInPrev.toLocaleString();
+  const currEl = document.getElementById('incomeMonthCurrent');
+  if (currEl) currEl.textContent = '¥' + incTotalCurrent.toLocaleString();
   const topEl = document.getElementById('incMonthTotalTop');
   if (topEl) topEl.textContent = '¥' + incTotal.toLocaleString();
 }
