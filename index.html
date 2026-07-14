@@ -5557,6 +5557,8 @@ document.addEventListener('compositionstart', () => { isComposing = true; });
 document.addEventListener('compositionend', () => { isComposing = false; });
 
 // Enterキー対応
+// 保存ボタンを持つモーダルではEnterで保存を発火させない（入力途中の誤保存防止）。
+// Enterで実行されるのは独立電卓モーダル（bdCalcModal）の「確定」のみ
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   if (isComposing) return;
@@ -5564,15 +5566,18 @@ document.addEventListener('keydown', (e) => {
   if (document.getElementById('confirmOverlay').classList.contains('open')) {
     e.preventDefault(); return;
   }
-  // モーダル内でEnterで保存（テキストエリア・SELECT・BUTTON以外）
+  // フォーカス中のボタン等はブラウザ標準動作に任せる
   const tag = document.activeElement.tagName;
   if (tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
   // 多重表示時は最上層（DOM上で最後=bdCalcModal等）のモーダルを対象にする
   const openModals = document.querySelectorAll('.modal-overlay.open');
   const activeModal = openModals[openModals.length - 1];
-  if (activeModal) {
+  if (!activeModal) return;
+  if (activeModal.id === 'bdCalcModal') {
     const primary = activeModal.querySelector('.btn-primary');
     if (primary && !primary.disabled) { e.preventDefault(); primary.click(); }
+  } else {
+    e.preventDefault(); // 保存はボタンタップのみ
   }
 });
 
@@ -5614,7 +5619,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // 電卓ボタンはタップ後にフォーカスが残り、Enterで最後のボタンが再実行されるため必ずblurする。
-// blur後のEnterはグローバルハンドラに到達し、最上層モーダルの保存/確定に統一される
+// blur後のEnterはグローバルハンドラに到達し、bdCalcModalのみ確定・他モーダルでは無効化される
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.calc-btn');
   if (btn) btn.blur();
