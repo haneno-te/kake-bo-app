@@ -11,15 +11,16 @@
     --surface2: #22263a;
     --border: #2e3350;
     --accent: #6c8fff;
-    --income: #4ecb8d;
+    --income: #22d3ee;      /* 収入・プラス残高・清算済み=シアン */
     --expense: #ff6b6b;
     --text: #e8eaf6;
     --text2: #8892b0;
     --card: #1e2235;
-    --bad: #ff9f43;
-    --bad-bg: rgba(255,159,67,0.12);
-    --card-color: #a78bfa;  /* カード（デビット含む）の統一色 */
-    --work: #fbbf24;        /* 仕事の統一色（アンバー。--bad の橙と区別） */
+    --bad: #a78bfa;         /* BAD（無駄遣い・警告）=紫。👿との相性 */
+    --bad-bg: rgba(167,139,250,0.12);
+    --card-color: #4ecb8d;  /* カード（デビット含む）=緑 */
+    --cash: #ff9f43;        /* 現金・振込=橙（現金≒支出なので赤寄り） */
+    --work: #ffd60a;        /* 仕事=ビビット黄 */
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -302,7 +303,7 @@
     border-color: var(--accent); color: var(--accent);
   }
   .type-btn.income-active {
-    background: rgba(78,203,141,0.15);
+    background: rgba(34,211,238,0.15);
     border-color: var(--income); color: var(--income);
   }
 
@@ -394,7 +395,7 @@
 
   /* 総資産 */
   .total-asset-bar {
-    background: linear-gradient(135deg, rgba(108,143,255,0.15), rgba(78,203,141,0.1));
+    background: linear-gradient(135deg, rgba(108,143,255,0.15), rgba(34,211,238,0.1));
     border: 1px solid var(--accent);
     border-radius: 12px; padding: 16px; margin-bottom: 12px;
     text-align: center;
@@ -453,7 +454,7 @@
   }
   .progress-bar-fill {
     height: 100%; border-radius: 6px;
-    background: linear-gradient(90deg, var(--work), #ffd977); transition: width 0.4s; /* 仕事比率バー=アンバー */
+    background: linear-gradient(90deg, var(--work), #ffe97a); transition: width 0.4s; /* 仕事比率バー=ビビット黄 */
   }
 
   /* モーダル */
@@ -539,7 +540,7 @@
   /* カード分割バッジ */
   .installment-badge {
     display: inline-block; font-size: 10px; padding: 1px 6px;
-    border-radius: 4px; background: rgba(167,139,250,0.15);
+    border-radius: 4px; background: rgba(78,203,141,0.15);
     color: var(--card-color); margin-left: 4px;
   }
 
@@ -548,13 +549,13 @@
     display: inline-block; font-size: 10px; padding: 1px 6px;
     border-radius: 4px; margin-top: 2px;
   }
-  .pay-badge.cash { background: rgba(78,203,141,0.1); color: var(--income); }
-  .pay-badge.card { background: rgba(167,139,250,0.1); color: var(--card-color); }
-  .pay-badge.transfer { background: rgba(78,203,141,0.1); color: var(--income); } /* 現金・振込=緑に統一 */
+  .pay-badge.cash { background: rgba(255,159,67,0.1); color: var(--cash); }
+  .pay-badge.card { background: rgba(78,203,141,0.1); color: var(--card-color); }
+  .pay-badge.transfer { background: rgba(255,159,67,0.1); color: var(--cash); } /* 現金・振込=橙に統一 */
 
   /* 差額調整ボタン */
   .adjust-btn {
-    background: rgba(255,159,67,0.12); border: 1px solid var(--bad);
+    background: rgba(167,139,250,0.12); border: 1px solid var(--bad);
     color: var(--bad); border-radius: 6px; padding: 5px 10px;
     font-size: 11px; font-weight: 600; cursor: pointer;
   }
@@ -631,7 +632,7 @@
      合計・総額=赤 / 現金・振込=緑 / カード=紫 / 仕事=アンバー / 構造=青
      ※末尾に置き、同一詳細度の既定色より優先させる */
   .amt-total { color: var(--expense); }
-  .amt-cash  { color: var(--income); }
+  .amt-cash  { color: var(--cash); }
   .amt-card  { color: var(--card-color); }
   .work-edge { border-left: 3px solid var(--work); }
 
@@ -922,7 +923,7 @@
       <div style="font-size:11px;color:var(--text2);margin-top:4px;" id="badRatioText"></div>
     </div>
     <div class="progress-bar-wrap" style="margin-bottom:10px;">
-      <div id="badProgressBar" style="height:100%;border-radius:6px;background:linear-gradient(90deg,var(--bad),#ffcc02);transition:width 0.4s;width:0%;"></div>
+      <div id="badProgressBar" style="height:100%;border-radius:6px;background:linear-gradient(90deg,var(--bad),#c4b5fd);transition:width 0.4s;width:0%;"></div>
     </div>
     <div id="badCategoryBreakdown"></div>
   </div>
@@ -4758,7 +4759,7 @@ function renderSettings() {
         <button class="btn-order" onclick="moveSettingItem('card',${i},-1)">▲</button>
         <button class="btn-order" onclick="moveSettingItem('card',${i},1)">▼</button>
       </div>
-      <div class="setting-item-name">${item.name}${item.billingDay ? ` <span style="font-size:10px;color:var(--accent);">${item.billingDay}日</span>` : ''}${item.isDebit ? ' <span style="font-size:10px;color:var(--card-color);background:rgba(167,139,250,0.15);border-radius:4px;padding:1px 5px;">💳デビット</span>' : ''}</div>
+      <div class="setting-item-name">${item.name}${item.billingDay ? ` <span style="font-size:10px;color:var(--accent);">${item.billingDay}日</span>` : ''}${item.isDebit ? ' <span style="font-size:10px;color:var(--card-color);background:rgba(78,203,141,0.15);border-radius:4px;padding:1px 5px;">💳デビット</span>' : ''}</div>
       <button class="btn-icon-edit" onclick="openSettingEditModal('${item.id}','card')">✏️</button>
       <button class="btn-icon-del" onclick="deleteSettingItem('${item.id}','card')">🗑️</button>
     </div>
