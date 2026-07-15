@@ -1830,6 +1830,7 @@ window.calcPress = (prefix, key) => {
     } else {
       calcState[prefix] += key;
     }
+    calcOverwrite[prefix] = false; // 演算子入力=式を続ける意思。編集モードの上書きを解除
   } else {
     // 数字キー
     if (calcOverwrite[prefix]) {
@@ -5589,19 +5590,24 @@ document.addEventListener('keydown', (e) => {
   if (document.getElementById('confirmOverlay').classList.contains('open')) {
     e.preventDefault(); return;
   }
-  // フォーカス中のボタン等はブラウザ標準動作に任せる
-  const tag = document.activeElement.tagName;
-  if (tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
   // 多重表示時は最上層（DOM上で最後=bdCalcModal等）のモーダルを対象にする
   const openModals = document.querySelectorAll('.modal-overlay.open');
   const activeModal = openModals[openModals.length - 1];
-  if (!activeModal) return;
-  if (activeModal.id === 'bdCalcModal') {
+  const tag = document.activeElement.tagName;
+  const onCalcBtn = tag === 'BUTTON' && document.activeElement.classList.contains('calc-btn');
+  // 独立電卓モーダル：電卓ボタンにフォーカスが残っていてもEnter=確定に統一
+  if (activeModal && activeModal.id === 'bdCalcModal') {
+    if (tag === 'BUTTON' && !onCalcBtn) return; // 確定/キャンセル/×は標準動作（そのボタン押下）
     const primary = activeModal.querySelector('.btn-primary');
     if (primary && !primary.disabled) { e.preventDefault(); primary.click(); }
-  } else {
-    e.preventDefault(); // 保存はボタンタップのみ
+    return;
   }
+  // 電卓ボタンにフォーカスが残っている場合、Enterでの最終キー再実行を防ぐ（全電卓共通）
+  if (onCalcBtn) { if (activeModal) e.preventDefault(); return; }
+  // フォーカス中のその他ボタン等はブラウザ標準動作に任せる
+  if (tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+  if (!activeModal) return;
+  e.preventDefault(); // 保存ボタンを持つモーダルではEnterで保存しない（保存はボタンタップのみ）
 });
 
 // confirmOverlay内でのEnterキーを完全無効化
