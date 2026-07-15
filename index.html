@@ -5595,19 +5595,23 @@ document.addEventListener('keydown', (e) => {
   const activeModal = openModals[openModals.length - 1];
   const tag = document.activeElement.tagName;
   const onCalcBtn = tag === 'BUTTON' && document.activeElement.classList.contains('calc-btn');
-  // 独立電卓モーダル：電卓ボタンにフォーカスが残っていてもEnter=確定に統一
-  if (activeModal && activeModal.id === 'bdCalcModal') {
-    if (tag === 'BUTTON' && !onCalcBtn) return; // 確定/キャンセル/×は標準動作（そのボタン押下）
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return;
+  // フォーカス中の電卓以外のボタン（保存/キャンセル/×等）は標準動作＝そのボタン押下
+  if (tag === 'BUTTON' && !onCalcBtn) return;
+  if (!activeModal) { if (onCalcBtn) e.preventDefault(); return; }
+  // 独立電卓モーダル：Enter=確定（値の書き戻し＋クローズ）。.calc-btnフォーカス残留時も同様
+  if (activeModal.id === 'bdCalcModal') {
     const primary = activeModal.querySelector('.btn-primary');
     if (primary && !primary.disabled) { e.preventDefault(); primary.click(); }
     return;
   }
-  // 電卓ボタンにフォーカスが残っている場合、Enterでの最終キー再実行を防ぐ（全電卓共通）
-  if (onCalcBtn) { if (activeModal) e.preventDefault(); return; }
-  // フォーカス中のその他ボタン等はブラウザ標準動作に任せる
-  if (tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
-  if (!activeModal) return;
-  e.preventDefault(); // 保存ボタンを持つモーダルではEnterで保存しない（保存はボタンタップのみ）
+  // 保存モーダル：Enterで保存は発火しない（9d22c12維持・保存はボタンタップのみ）。
+  // インライン電卓のEnterは「＝」動作＝式を評価結果に確定し数式表示をクリア（保存もクローズもしない）。
+  // テキスト入力欄（INPUT）フォーカス中は電卓を動かさない
+  e.preventDefault();
+  if (tag !== 'INPUT' && activeCalc && /[+\-*\/]/.test(calcState[activeCalc] || '')) {
+    calcSet(activeCalc, calcGetValue(activeCalc));
+  }
 });
 
 // confirmOverlay内でのEnterキーを完全無効化
