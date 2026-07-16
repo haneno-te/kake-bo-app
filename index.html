@@ -807,10 +807,6 @@
     <button class="btn-sm exp" onclick="openFixedModal()">＋ 追加</button>
   </div>
   <div id="fixedList"><div class="loading">データなし</div></div>
-  <div class="card" style="margin-top:8px;">
-    <div class="card-title">今月の固定費合計</div>
-    <div style="font-size:20px;font-weight:700;color:var(--expense);" id="fixedMonthTotal">¥0</div>
-  </div>
 </div>
 
 <!-- 集計タブ -->
@@ -1472,63 +1468,10 @@
       <input type="text" class="form-input" id="fix-name" placeholder="例：家賃、電気代">
     </div>
     <div class="form-row">
-      <label class="form-label">種別</label>
-      <select class="form-select" id="fix-type">
-        <option value="fixed">完全固定（毎月同額）</option>
-        <option value="variable">項目固定・金額変動</option>
+      <label class="form-label">カテゴリ（任意）</label>
+      <select class="form-select" id="fix-categoryId">
+        <option value="">-- 選択（任意）--</option>
       </select>
-    </div>
-    <div class="form-row">
-      <label class="form-label">金額（円）</label>
-      <div class="calc-display">
-        <div class="calc-result zero" id="fix-calcResult">0</div>
-        <div class="calc-expr" id="fix-calcExpr"></div>
-      </div>
-      <div class="calc-grid">
-        <button class="calc-btn" onclick="calcPress('fix','7')">7</button>
-        <button class="calc-btn" onclick="calcPress('fix','8')">8</button>
-        <button class="calc-btn" onclick="calcPress('fix','9')">9</button>
-        <button class="calc-btn op" onclick="calcPress('fix','+')">＋</button>
-        <button class="calc-btn" onclick="calcPress('fix','4')">4</button>
-        <button class="calc-btn" onclick="calcPress('fix','5')">5</button>
-        <button class="calc-btn" onclick="calcPress('fix','6')">6</button>
-        <button class="calc-btn op" onclick="calcPress('fix','-')">－</button>
-        <button class="calc-btn" onclick="calcPress('fix','1')">1</button>
-        <button class="calc-btn" onclick="calcPress('fix','2')">2</button>
-        <button class="calc-btn" onclick="calcPress('fix','3')">3</button>
-        <button class="calc-btn op" onclick="calcPress('fix','*')">×</button>
-        <button class="calc-btn span2" onclick="calcPress('fix','0')">0</button>
-        <button class="calc-btn" onclick="calcPress('fix','00')">00</button>
-        <button class="calc-btn op" onclick="calcPress('fix','/')">÷</button>
-        <button class="calc-btn span3" onclick="calcClr('fix')">クリア</button>
-        <button class="calc-btn del" onclick="calcDel('fix')">⌫</button>
-      </div>
-    </div>
-    <div class="form-row">
-      <label class="form-label">今月の実績額（変動の場合）</label>
-      <div class="calc-display">
-        <div class="calc-result zero" id="fixact-calcResult">0</div>
-        <div class="calc-expr" id="fixact-calcExpr"></div>
-      </div>
-      <div class="calc-grid">
-        <button class="calc-btn" onclick="calcPress('fixact','7')">7</button>
-        <button class="calc-btn" onclick="calcPress('fixact','8')">8</button>
-        <button class="calc-btn" onclick="calcPress('fixact','9')">9</button>
-        <button class="calc-btn op" onclick="calcPress('fixact','+')">＋</button>
-        <button class="calc-btn" onclick="calcPress('fixact','4')">4</button>
-        <button class="calc-btn" onclick="calcPress('fixact','5')">5</button>
-        <button class="calc-btn" onclick="calcPress('fixact','6')">6</button>
-        <button class="calc-btn op" onclick="calcPress('fixact','-')">－</button>
-        <button class="calc-btn" onclick="calcPress('fixact','1')">1</button>
-        <button class="calc-btn" onclick="calcPress('fixact','2')">2</button>
-        <button class="calc-btn" onclick="calcPress('fixact','3')">3</button>
-        <button class="calc-btn op" onclick="calcPress('fixact','*')">×</button>
-        <button class="calc-btn span2" onclick="calcPress('fixact','0')">0</button>
-        <button class="calc-btn" onclick="calcPress('fixact','00')">00</button>
-        <button class="calc-btn op" onclick="calcPress('fixact','/')">÷</button>
-        <button class="calc-btn span3" onclick="calcClr('fixact')">クリア</button>
-        <button class="calc-btn del" onclick="calcDel('fixact')">⌫</button>
-      </div>
     </div>
     <div class="form-row">
       <label class="form-label">種別（公私）</label>
@@ -1774,8 +1717,8 @@ let currentFixPayMethod = null;
 let confirmCallback = null;
 
 // ===== 電卓 =====
-const calcState    = { exp:'', inc:'', tx:'', txfee:'', fix:'', fixact:'', adj:'', initBal:'', fp:'', fpfee:'', expfee:'', bd:'' };
-const calcOverwrite = { exp:true, inc:true, tx:true, txfee:true, fix:true, fixact:true, adj:true, initBal:true, fp:true, fpfee:true, expfee:true, bd:true };
+const calcState    = { exp:'', inc:'', tx:'', txfee:'', adj:'', initBal:'', fp:'', fpfee:'', expfee:'', bd:'' };
+const calcOverwrite = { exp:true, inc:true, tx:true, txfee:true, adj:true, initBal:true, fp:true, fpfee:true, expfee:true, bd:true };
 let activeCalc = '';
 
 function calcEval(expr) {
@@ -2030,6 +1973,22 @@ function populateSelects() {
   });
   const ungrouped = settings.categories.filter(c => !c.groupId && !c.hidden);
   ungrouped.forEach(c => { catSel.innerHTML += `<option value="${c.id}">${c.name}</option>`; });
+
+  // 固定費カテゴリ（支出モーダルの費目と同じ選択肢構成）
+  const fixCatSel = document.getElementById('fix-categoryId');
+  if (fixCatSel) {
+    fixCatSel.innerHTML = '<option value="">-- 選択（任意）--</option>';
+    settings.catGroups.forEach(g => {
+      const items = settings.categories.filter(c => c.groupId === g.id && !c.hidden);
+      if (items.length) {
+        fixCatSel.innerHTML += `<optgroup label="${g.name}">` +
+          items.map(c => `<option value="${c.id}">${c.name}</option>`).join('') + '</optgroup>';
+      }
+    });
+    settings.categories.filter(c => !c.groupId && !c.hidden).forEach(c => {
+      fixCatSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+    });
+  }
 
   // 費目グループ選択（設定）
   const catGSel = document.getElementById('newCategoryGroupSel');
@@ -3274,7 +3233,6 @@ function renderFixedTab() {
   const list = document.getElementById('fixedList');
   if (fixedCosts.length === 0) {
     list.innerHTML = '<div class="loading">データなし</div>';
-    document.getElementById('fixedMonthTotal').textContent = '¥0';
     return;
   }
   const ym = currentYM();
@@ -3282,11 +3240,8 @@ function renderFixedTab() {
   const nextM = currentMonth === 12
     ? `${currentYear+1}-01-01`
     : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
-  let total = 0;
   list.innerHTML = fixedCosts.map((f, i) => {
-    const amount = f.actualAmount || f.amount || 0;
-    total += amount;
-    const typeLabel = f.fixedType === 'fixed' ? '完全固定' : '変動あり';
+    const catName = settings.categories.find(c => c.id === f.category)?.name || '';
     const kindLabel = f.kind === 'work' ? '仕事' : 'プライベート';
     const payDayLabel = f.payDay ? `毎月${f.payDay}日` : '';
     const payMethodLabel = f.payMethod === 'cash' ? '現金' :
@@ -3323,16 +3278,14 @@ function renderFixedTab() {
       </div>
       <div class="fixed-item-left">
         <div class="fixed-item-name">${isWorkFix ? WORK_ICON + ' ' : ''}${f.name}</div>
-        <div class="fixed-item-type">${typeLabel} · ${kindLabel}</div>
+        <div class="fixed-item-type">${[catName, kindLabel].filter(Boolean).join(' · ')}</div>
         ${payInfo ? `<div class="fixed-item-type" style="color:var(--accent);margin-top:1px;">${payInfo}</div>` : ''}
       </div>
-      <div class="fixed-item-amount">¥${amount.toLocaleString()}</div>
       ${registerCell}
       <button class="btn-icon-edit" onclick="openFixedModal('${f.id}')">✏️</button>
       <button class="btn-icon-del" onclick="deleteFixed('${f.id}')">🗑️</button>
     </div>`;
   }).join('');
-  document.getElementById('fixedMonthTotal').textContent = '¥' + total.toLocaleString();
 }
 
 window.unregisterFixed = (id, checkbox) => {
@@ -3373,8 +3326,8 @@ window.openFixedExpenseModal = (fixedCostId) => {
     return;
   }
   openExpenseModal(null);
-  // プリフィル
-  calcSet('exp', f.actualAmount || f.amount || '');
+  // プリフィル（金額はマスターに持たないため空欄。F2で前月額プレロード予定）
+  calcSet('exp', '');
   document.getElementById('exp-date').value = todayStr();
   setPayMethod(f.payMethod);
   if (f.payMethod === 'transfer' && f.payAccountId) {
@@ -3402,7 +3355,7 @@ window.openFixedPayModal = (id) => {
   if (!f.payMethod) { alert('支払い方法を設定してください'); return; }
   document.getElementById('fixedPayModalTitle').textContent = `${f.name} 今月分を登録`;
   document.getElementById('fp-fixedCostId').value = id;
-  calcSet('fp', f.actualAmount || f.amount || '');
+  calcSet('fp', ''); // 金額はマスターに持たないため空欄。F2で前月額プレロード予定
   openModal('fixedPayModal');
 };
 
@@ -3448,9 +3401,7 @@ window.openFixedModal = (id = null) => {
     const f = fixedCosts.find(x => x.id === id);
     if (f) {
       document.getElementById('fix-name').value = f.name || '';
-      calcSet('fix', f.amount || '');
-      calcSet('fixact', f.actualAmount || '');
-      document.getElementById('fix-type').value = f.fixedType || 'fixed';
+      document.getElementById('fix-categoryId').value = f.category || '';
       setFixKind(f.kind || 'private');
       document.getElementById('fix-payDay').value = f.payDay || '';
       if (f.payMethod) {
@@ -3468,9 +3419,7 @@ window.openFixedModal = (id = null) => {
     }
   } else {
     document.getElementById('fix-name').value = '';
-    calcSet('fix', '');
-    calcSet('fixact', '');
-    document.getElementById('fix-type').value = 'fixed';
+    document.getElementById('fix-categoryId').value = '';
     setFixKind('private');
     document.getElementById('fix-payDay').value = '';
     currentFixPayMethod = null;
@@ -3483,112 +3432,23 @@ window.openFixedModal = (id = null) => {
 
 window.saveFixed = async () => {
   const name = document.getElementById('fix-name').value.trim();
-  const amount = calcGetValue('fix');
-  const actualAmount = calcGetValue('fixact') || null;
-  const fixedType = document.getElementById('fix-type').value;
   if (!name) { alert('項目名は必須です'); return; }
+  const category = document.getElementById('fix-categoryId').value || null;
   const payDay = parseInt(document.getElementById('fix-payDay').value) || null;
   const payMethod = currentFixPayMethod || null;
   const payCardId = payMethod === 'card' ? (document.getElementById('fix-payCardId').value || null) : null;
   if (payMethod === 'card' && !payCardId) { alert('支払い方法がカードの場合はカードを選択してください'); return; }
   const payAccountId = payMethod === 'transfer' ? (document.getElementById('fix-payAccountId').value || null) : null;
-  const data = { name, amount, actualAmount, fixedType, kind: currentFixKind, payDay, payMethod, payCardId, payAccountId };
+  // マスターは項目情報のみ（F1）。金額はここでは持たず、子データが唯一の事実
+  const data = { name, category, kind: currentFixKind, payDay, payMethod, payCardId, payAccountId };
 
   if (editingFixedId) {
-    const oldF = fixedCosts.find(x => x.id === editingFixedId);
-    const oldPayMethod = oldF?.payMethod || null;
-    const ym = currentYM();
-    const effAmt = actualAmount || amount;
-
-    await updateDoc(doc(db, 'fixed_costs', editingFixedId), data);
-
-    // 当月分の子データを取得
-    const [cpSnap, expSnap, txSnap] = await Promise.all([
-      getDocs(collection(db, 'card_pools')),
-      getDocs(collection(db, 'expenses')),
-      getDocs(collection(db, 'account_txs')),
-    ]);
-    const curCp = [];
-    cpSnap.forEach(d => {
-      const r = { id: d.id, ...d.data() };
-      if (r.fixedCostId !== editingFixedId) return;
-      if (r.confirmedMonth) return; // 確定済み（支払い済み）プールは編集対象外（unregisterFixed と同じ扱い）
-      if ((r.month === ym) || (!r.month && r.date && r.date.startsWith(ym))) curCp.push(r);
+    // 過去の子データ（expenses/card_pools/account_txs）には一切触れない。
+    // 廃止フィールドは既存docから削除して移行完了とする
+    await updateDoc(doc(db, 'fixed_costs', editingFixedId), {
+      ...data,
+      amount: deleteField(), actualAmount: deleteField(), fixedType: deleteField()
     });
-    const curExp = [];
-    expSnap.forEach(d => {
-      const r = { id: d.id, ...d.data() };
-      if (r.fixedCostId !== editingFixedId) return;
-      if (r.date && r.date.startsWith(ym)) curExp.push(r);
-    });
-    const curTx = [];
-    txSnap.forEach(d => {
-      const r = { id: d.id, ...d.data() };
-      if (r.fixedCostId !== editingFixedId) return;
-      if (r.date && r.date.startsWith(ym)) curTx.push(r);
-    });
-
-    const batch = writeBatch(db);
-
-    if (!payMethod) {
-      // payMethodがnullになった → 当月分の子データを全削除
-      for (const r of curCp) {
-        const linkedConfirmed = await getDocs(query(collection(db, 'card_confirmed'), where('poolId', '==', r.id)));
-        for (const cc of linkedConfirmed.docs) batch.delete(doc(db, 'card_confirmed', cc.id));
-      }
-      curCp.forEach(r => batch.delete(doc(db, 'card_pools', r.id)));
-      curExp.forEach(r => batch.delete(doc(db, 'expenses', r.id)));
-      curTx.forEach(r => batch.delete(doc(db, 'account_txs', r.id)));
-    } else if (oldPayMethod === payMethod) {
-      // 同じpayMethod → 差分更新
-      if (payMethod === 'card') {
-        curCp.forEach(r => batch.update(doc(db, 'card_pools', r.id), { amount: effAmt, memo: name, cardId: payCardId }));
-      } else if (payMethod === 'transfer') {
-        curExp.forEach(r => batch.update(doc(db, 'expenses', r.id), { amount: effAmt, memo: name, accountId: payAccountId }));
-        curTx.forEach(r => batch.update(doc(db, 'account_txs', r.id), { amount: effAmt, memo: name, accountId: payAccountId }));
-      } else if (payMethod === 'cash') {
-        curExp.forEach(r => batch.update(doc(db, 'expenses', r.id), { amount: effAmt, memo: name }));
-      }
-    } else {
-      // payMethod変更 → 古い当月分を削除 + 新規生成
-      for (const r of curCp) {
-        const linkedConfirmed = await getDocs(query(collection(db, 'card_confirmed'), where('poolId', '==', r.id)));
-        for (const cc of linkedConfirmed.docs) batch.delete(doc(db, 'card_confirmed', cc.id));
-      }
-      curCp.forEach(r => batch.delete(doc(db, 'card_pools', r.id)));
-      curExp.forEach(r => batch.delete(doc(db, 'expenses', r.id)));
-      curTx.forEach(r => batch.delete(doc(db, 'account_txs', r.id)));
-      const date = payMethod === 'card' ? ym + '-01' : todayStr();
-      const kind = currentFixKind;
-      if (payMethod === 'card' && payCardId) {
-        batch.set(doc(collection(db, 'card_pools')), {
-          amount: effAmt, date, cardId: payCardId, memo: name,
-          installType: 'once', fixedCostId: editingFixedId, month: ym
-        });
-      } else if (payMethod === 'transfer') {
-        const expRef = doc(collection(db, 'expenses'));
-        batch.set(expRef, {
-          date, amount: effAmt, categoryId: '', shop: '', memo: name,
-          type: kind === 'work' ? 'work' : 'private',
-          payMethod: 'transfer', accountId: payAccountId,
-          breakdowns: [], noReceipt: false, fixedCostId: editingFixedId
-        });
-        if (payAccountId) {
-          batch.set(doc(collection(db, 'account_txs')), {
-            accountId: payAccountId, txType: 'transfer_out',
-            amount: effAmt, date, memo: name, fixedCostId: editingFixedId
-          });
-        }
-      } else if (payMethod === 'cash') {
-        batch.set(doc(collection(db, 'expenses')), {
-          date, amount: effAmt, categoryId: '', shop: '', memo: name,
-          type: kind === 'work' ? 'work' : 'private',
-          payMethod: 'cash', breakdowns: [], noReceipt: false, fixedCostId: editingFixedId
-        });
-      }
-    }
-
-    await batch.commit();
   } else {
     data.order = fixedCosts.length;
     await addDoc(collection(db, 'fixed_costs'), data);
@@ -5337,31 +5197,12 @@ window.runHealthCheck = async () => {
       issuesB1.push({ ...cp, reason: `card_pools.amount=${cp.amount} vs expenses.amount=${exp.amount}` });
   });
 
-  // B2: card_pools vs fixed_costs amount 乖離
-  // 固定費の金額改定で過去月のプールは正当に乖離するため、
-  // 確定済み・過去月（実際の今日の月を基準）は参考警告のみ（一括削除対象外）
-  const issuesB2 = [];
-  const issuesB2Warn = [];
-  const realTodayYM = todayStr().slice(0, 7);
-  cpMap.forEach(cp => {
-    if (!cp.fixedCostId) return;
-    const fc = fcMap.get(cp.fixedCostId);
-    if (!fc) return;
-    const fcAmt = fc.actualAmount ?? fc.amount ?? 0;
-    if ((cp.amount || 0) !== fcAmt) {
-      const poolYM = cp.month || (cp.date || '').slice(0, 7);
-      if (cp.confirmedMonth || (poolYM && poolYM < realTodayYM)) {
-        issuesB2Warn.push({ ...cp, reason: `card_pools.amount=${cp.amount} vs fixed_costs.amount=${fcAmt}（確定済み／過去月のため参考警告・一括削除対象外）` });
-      } else {
-        issuesB2.push({ ...cp, reason: `card_pools.amount=${cp.amount} vs fixed_costs.amount=${fcAmt}` });
-      }
-    }
-  });
+  // B2（マスター金額と子データの乖離チェック）はF1でマスターから金額を廃止したため削除（欠番）
 
   const totalIssues = issuesA1.length + issuesA1Warn.length + issuesA2.length + issuesA3.length + issuesA4.length +
     issuesA5.length + issuesA6.length + issuesA7.length + issuesA8.length + issuesA9.length +
     issuesA10.length + issuesA11.length + issuesA12.length + issuesA13.length + issuesA14.length +
-    issuesB1.length + issuesB2.length + issuesB2Warn.length;
+    issuesB1.length;
 
   const short = id => (id || '').substring(0, 8);
   const fmtAmt = n => (n ?? 0).toLocaleString() + '円';
@@ -5415,8 +5256,6 @@ window.runHealthCheck = async () => {
       ${statRow('A14: デビット支出 → account_txs（逆方向）', issuesA14.length, 'デビット支出を debitExpenseId で参照する account_txs が存在しない')}
       <div style="font-size:12px;font-weight:bold;color:var(--text2);margin:8px 0 4px;">─ カテゴリB：金額乖離確認 ─</div>
       ${statRow('B1: card_pools vs expenses 金額乖離', issuesB1.length, '紐付く支出と未払いプールの金額が一致しない')}
-      ${statRow('B2: card_pools vs fixed_costs 金額乖離', issuesB2.length, '紐付く固定費と未払いプールの金額が一致しない')}
-      ${statRow('B2w: ⚠️ 金額乖離・確定済み／過去月（参考警告）', issuesB2Warn.length, '固定費の金額改定による正当な乖離の可能性。一括削除対象外')}
     </div>`;
 
   resultEl.innerHTML = summary
@@ -5435,9 +5274,7 @@ window.runHealthCheck = async () => {
     + makeDetail('A12: ⚠️ card_confirmed.poolId → card_pools 欠落（参考警告・一括削除対象外）', 'card_confirmed', issuesA12, ccFields)
     + makeDetail('A13: クレジット支出 → card_pools 欠落（逆方向）', 'expenses', issuesA13, expFields)
     + makeDetail('A14: デビット支出 → account_txs 欠落（逆方向）', 'expenses', issuesA14, expFields)
-    + makeDetail('B1: card_pools vs expenses 金額乖離', 'card_pools', issuesB1, cpFields)
-    + makeDetail('B2: card_pools vs fixed_costs 金額乖離', 'card_pools', issuesB2, cpFields)
-    + makeDetail('B2w: ⚠️ 金額乖離・確定済み／過去月（参考警告・一括削除対象外）', 'card_pools', issuesB2Warn, cpFields);
+    + makeDetail('B1: card_pools vs expenses 金額乖離', 'card_pools', issuesB1, cpFields);
 
   // 削除対象を集約（account_txs は除外）
   _healthCheckIssues = [
@@ -5450,7 +5287,6 @@ window.runHealthCheck = async () => {
     ...issuesA13.map(r => ({ col: 'expenses',      id: r.id, reason: 'A13: ' + r.reason })),
     ...issuesA14.map(r => ({ col: 'expenses',      id: r.id, reason: 'A14: ' + r.reason })),
     ...issuesB1.map(r => ({ col: 'card_pools',    id: r.id, reason: 'B1: ' + r.reason })),
-    ...issuesB2.map(r => ({ col: 'card_pools',    id: r.id, reason: 'B2: ' + r.reason })),
   ];
   const deleteCount = _healthCheckIssues.length;
   const wrap = document.getElementById('healthDeleteWrap');
