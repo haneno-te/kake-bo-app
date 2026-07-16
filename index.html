@@ -499,6 +499,8 @@
   }
   .confirm-ok { background: var(--expense); color: #fff; }
   .confirm-cancel { background: var(--surface2); color: var(--text2); }
+  /* スクリプト起点のfocusでは:focus-visibleが立たずリングが出ないため、:focusで明示表示 */
+  .confirm-btns button:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   /* トースト */
   .toast {
@@ -2970,9 +2972,6 @@ function renderCardTab() {
 
     const unpaidAmt = calcCardUnpaidTotal(card.id);
     const settledAmt = calcCardMonthlySettled(card.id, ym);
-    const carryAmt = unpaidAmt - settledAmt;
-    const carryColor = warnCard ? 'var(--expense)' : 'var(--bad)';
-    const carryText = (warnCard ? '⚠️ ' : '') + '¥' + carryAmt.toLocaleString();
     const totalLabel = `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
       <span style="color:${warnCard ? 'var(--expense)' : (unpaidAmt > 0 ? 'var(--bad)' : 'var(--text2)')};font-size:13px;font-weight:700;">${warnCard && unpaidAmt > 0 ? '⚠️ ' : ''}未払い ¥${unpaidAmt.toLocaleString()}</span>
       <span style="color:var(--text2);font-size:10px;">今月引き落とし ¥${settledAmt.toLocaleString()}</span>
@@ -3008,11 +3007,6 @@ function renderCardTab() {
         <span style="color:var(--text);">¥${settledAmt.toLocaleString()}</span>
       </div>
       ${payoutBtnHtml}
-      <div style="border-top:1px solid var(--bad);margin-bottom:6px;"></div>
-      <div style="display:flex;justify-content:space-between;font-size:13px;">
-        <span style="color:${carryColor};font-weight:700;">差引繰越</span>
-        <span style="color:${carryColor};font-weight:700;">${carryText}</span>
-      </div>
     </div>`;
 
     return `<div class="accordion-section" data-card-id="${card.id}">
@@ -3218,7 +3212,7 @@ async function onCardPayoutTap(cardId, ym) {
       await deleteDoc(doc(db, 'account_txs', existing.id));
       await loadMonthData();
       showToast('振替記録を削除しました');
-    }, '削除', 'キャンセル', true);
+    }, '解除', 'キャンセル', true);
     return;
   }
 
@@ -3890,6 +3884,15 @@ function renderSummary() {
 
 // ===== 支出CRUD =====
 window.openExpenseModal = (id = null, date = null) => {
+  // ✅済み月の確定プールに紐づく支出は編集入口でガード（saveExpense側の保存時ガードは多重防御として存置）
+  if (id) {
+    const lockedPool = cardPools.find(p => p.expenseId === id && p.confirmedMonth &&
+      accountTxs.some(t => t.cardPayoutKey === `${p.cardId}_${p.confirmedMonth}`));
+    if (lockedPool) {
+      alert('この支出のカード引落は✅（振替完了）済みです。編集するには先にカードタブで✅を解除してください。');
+      return;
+    }
+  }
   editingExpenseId = id;
   document.getElementById('expenseModalTitle').textContent = id ? '支出を編集' : '支出を追加';
   if (id) {
