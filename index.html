@@ -1594,6 +1594,10 @@
       <label class="form-label">引き落とし口座</label>
       <select class="form-select" id="editSettingDebitAccountId"></select>
     </div>
+    <div class="form-row" id="editSettingPayoutAccountRow" style="display:none;">
+      <label class="form-label">カード引落口座（✅振替完了の出金元）</label>
+      <select class="form-select" id="editSettingPayoutAccountId"></select>
+    </div>
     <button class="btn-primary" onclick="saveSettingEdit()">保存</button>
     <button class="btn-secondary" id="editSettingCancelBtn" onclick="closeModal('settingEditModal')">キャンセル</button>
   </div>
@@ -2973,6 +2977,27 @@ function renderCardTab() {
       <span style="color:${warnCard ? 'var(--expense)' : (unpaidAmt > 0 ? 'var(--bad)' : 'var(--text2)')};font-size:13px;font-weight:700;">${warnCard && unpaidAmt > 0 ? '⚠️ ' : ''}未払い ¥${unpaidAmt.toLocaleString()}</span>
       <span style="color:var(--text2);font-size:10px;">今月引き落とし ¥${settledAmt.toLocaleString()}</span>
     </div>`;
+    // ✅振替完了（案A: 状態は出金レコードの cardPayoutKey 存在のみで判定。カード側に保存しない）
+    const payoutKey = `${card.id}_${ym}`;
+    const payoutDone = accountTxs.some(t => t.cardPayoutKey === payoutKey);
+    const cardBillingDay = getEffectiveBillingDay(card);
+    let lowBalWarnHtml = '';
+    if (!payoutDone && settledAmt > 0 && cardBillingDay && card.payoutAccountId) {
+      // ⑤ 引落日未到来 かつ 確定額 > 引落口座残高 のとき⚠️（表示のみ。未設定カードは比較不能のため対象外）
+      const billingDateStr = `${ym}-${String(cardBillingDay).padStart(2, '0')}`;
+      const payoutAcc = settings.accounts.find(a => a.id === card.payoutAccountId);
+      const payoutBal = calcAccountBalance(card.payoutAccountId, payoutAcc?.initialBalance || 0);
+      if (todayStr() < billingDateStr && settledAmt > payoutBal) {
+        lowBalWarnHtml = `<div style="font-size:11px;color:var(--expense);margin-bottom:6px;text-align:right;">⚠️ 引落口座（${payoutAcc?.name || ''}）の残高が確定額に不足しています</div>`;
+      }
+    }
+    const payoutBtnHtml = settledAmt > 0 || payoutDone
+      ? `<div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+          ${payoutDone
+            ? `<button class="btn-sm card-payout-btn" data-card-id="${card.id}" data-ym="${ym}" style="border-color:var(--income);color:var(--income);">✅ 振替済み（タップで解除）</button>`
+            : `<button class="btn-sm accent card-payout-btn" data-card-id="${card.id}" data-ym="${ym}">振替完了を記録</button>`}
+        </div>${lowBalWarnHtml}`
+      : '';
     const summarySectionHtml = `<div style="background:var(--bad-bg);border:1px solid var(--bad);border-radius:8px;padding:10px 14px;margin-bottom:8px;">
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
         <span style="color:var(--text2);">未払い総額</span>
@@ -2982,6 +3007,7 @@ function renderCardTab() {
         <span style="color:var(--text2);">今月（${currentMonth}月）支払予定</span>
         <span style="color:var(--text);">¥${settledAmt.toLocaleString()}</span>
       </div>
+      ${payoutBtnHtml}
       <div style="border-top:1px solid var(--bad);margin-bottom:6px;"></div>
       <div style="display:flex;justify-content:space-between;font-size:13px;">
         <span style="color:${carryColor};font-weight:700;">差引繰越</span>
@@ -3053,6 +3079,11 @@ window.confirmCardPayment = async () => {
   if (!c) return;
   const month = document.getElementById('cc-month').value;
   if (!month) { alert('引き落とし月を入力してください'); return; }
+  // ✅済み月への確定追加は確定額が変わるためガード（④）
+  if (accountTxs.some(t => t.cardPayoutKey === `${c.cardId}_${month}`)) {
+    alert('その月の引落は✅（振替完了）済みです。確定を追加するには先にカードタブで✅を解除してください。');
+    return;
+  }
 
   if (c.installType === 'installment') {
     const inputAmt = parseInt(document.getElementById('ccInstallAmtInput').value) || c.installAmt || 0;
@@ -3142,6 +3173,13 @@ window.openMasterFromCardItem = async (itemId, kind) => {
   }
   if (!target) { showToast('元データが見つかりません'); return; }
 
+  // ✅済み月の確定内容はマスター編集導線もガード（④）
+  if (kind === 'confirmed' && target.confirmedMonth &&
+      accountTxs.some(t => t.cardPayoutKey === `${target.cardId}_${target.confirmedMonth}`)) {
+    alert('この月の引落は✅（振替完了）済みです。編集するには先にカードタブで✅を解除してください。');
+    return;
+  }
+
   if (target.fixedCostId) {
     openFixedModal(target.fixedCostId);
     return;
@@ -3162,10 +3200,65 @@ window.openMasterFromCardItem = async (itemId, kind) => {
   }
 };
 
+// ===== カード引落 ✅振替完了（バッチ5） =====
+// 状態は出金レコードの cardPayoutKey="{cardId}_{YYYY-MM}" の存在のみで判定（案A）。
+// 生成は自動生成系と同じ定型addDocパターン、解除は showConfirm＋deleteDoc。
+let _payoutBusy = false; // 連打による二重生成防止
+
+async function onCardPayoutTap(cardId, ym) {
+  if (_payoutBusy) return;
+  const card = settings.cards.find(c => c.id === cardId);
+  if (!card) return;
+  const key = `${cardId}_${ym}`;
+  const existing = accountTxs.find(t => t.cardPayoutKey === key);
+
+  if (existing) {
+    // ✅解除 = 出金削除（デフォルトフォーカスは必ずキャンセル）
+    showConfirm('振替記録を削除しますか？', async () => {
+      await deleteDoc(doc(db, 'account_txs', existing.id));
+      await loadMonthData();
+      showToast('振替記録を削除しました');
+    }, '削除', 'キャンセル', true);
+    return;
+  }
+
+  if (!card.payoutAccountId) { alert('設定タブで引落口座を設定してください'); return; }
+  const billingDay = getEffectiveBillingDay(card);
+  if (!billingDay) { alert('設定タブで引落日を設定してください'); return; }
+  const amount = calcCardMonthlySettled(cardId, ym); // 引落額=振替額（再入力なし・絶対同額）
+  if (!amount) { showToast('この月の確定額がありません'); return; }
+  if (accountTxs.some(t => t.cardPayoutKey === key)) { showToast('すでに振替記録があります'); return; }
+
+  _payoutBusy = true;
+  try {
+    await addDoc(collection(db, 'account_txs'), {
+      accountId: card.payoutAccountId, txType: 'transfer_out',
+      amount, date: `${ym}-${String(billingDay).padStart(2, '0')}`,
+      memo: `カード引落：${card.name}`, cardPayoutKey: key
+    });
+    await loadMonthData();
+    showToast('振替完了を記録しました');
+  } finally {
+    _payoutBusy = false;
+  }
+}
+
+// イベント委譲（onclickへのデータ埋め込み禁止ルール準拠。コンテナは静的要素）
+document.getElementById('cardAccordionList').addEventListener('click', (e) => {
+  const btn = e.target.closest('.card-payout-btn');
+  if (btn) onCardPayoutTap(btn.dataset.cardId, btn.dataset.ym);
+});
+
 window.onCardConfirmedUncheck = (itemId, checkbox) => {
   checkbox.checked = true;
   const confirmed = [...cardPools.filter(c => c.id === itemId && c.confirmedMonth)];
   if (confirmed.length === 0) { showToast('元データが見つかりません'); return; }
+  // ✅済み月の確定解除はガード（出金額との同期はこのガードで担保）
+  const pool = confirmed[0];
+  if (accountTxs.some(t => t.cardPayoutKey === `${pool.cardId}_${pool.confirmedMonth}`)) {
+    alert('この月の引落は✅（振替完了）済みです。確定を解除するには先にカードタブで✅を解除してください。');
+    return;
+  }
   showConfirm(
     'この確定を取り消してプールに戻しますか？\n関連する手数料記録も削除されます',
     async () => {
@@ -3512,6 +3605,13 @@ window.saveFixed = async () => {
 };
 
 window.deleteFixed = (id) => {
+  // ✅済み月の確定プールを巻き込む削除はガード（④と同一原則）
+  const lockedPool = cardPools.find(p => p.fixedCostId === id && p.confirmedMonth &&
+    accountTxs.some(t => t.cardPayoutKey === `${p.cardId}_${p.confirmedMonth}`));
+  if (lockedPool) {
+    alert('この固定費の確定分は✅（振替完了）済みの月に含まれています。削除するには先にカードタブで✅を解除してください。');
+    return;
+  }
   showConfirm('この固定費を削除しますか？登録済みの当月以前の支払い記録もすべて削除されます。', async () => {
     const [cpSnap, expSnap, txSnap] = await Promise.all([
       getDocs(collection(db, 'card_pools')),
@@ -3903,6 +4003,13 @@ window.saveExpense = async () => {
   const _debitMemo = memo || shop || '（デビット決済）';
 
   if (editingExpenseId) {
+    // ✅済み月の確定額に紐づく支出の編集は裏口も含めてガード（④）
+    const lockedPool = cardPools.find(p => p.expenseId === editingExpenseId && p.confirmedMonth &&
+      accountTxs.some(t => t.cardPayoutKey === `${p.cardId}_${p.confirmedMonth}`));
+    if (lockedPool) {
+      alert('この支出のカード引落は✅（振替完了）済みです。編集するには先にカードタブで✅を解除してください。');
+      return;
+    }
     await updateDoc(doc(db, 'expenses', editingExpenseId), data);
 
     const oldExp = expenses.find(x => x.id === editingExpenseId);
@@ -4057,6 +4164,13 @@ window.saveExpense = async () => {
 
 window.deleteExpense = (id) => {
   const expense = expenses.find(x => x.id === id);
+  // ✅済み月の確定額に紐づく支出の削除もガード（④）
+  const lockedPool = cardPools.find(p => p.expenseId === id && p.confirmedMonth &&
+    accountTxs.some(t => t.cardPayoutKey === `${p.cardId}_${p.confirmedMonth}`));
+  if (lockedPool) {
+    alert('この支出のカード引落は✅（振替完了）済みです。削除するには先にカードタブで✅を解除してください。');
+    return;
+  }
   let msg = 'この支出記録を削除しますか？';
   if (expense?.payMethod === 'card' && expense.cardId) {
     const card = settings.cards.find(c => c.id === expense.cardId);
@@ -4383,6 +4497,10 @@ window.openAccountTxModal = (id = null, date = null, accountId = null, txType = 
       alert('この記録は手数料です。元の取引（振込・引き下ろし・移動）側から管理されます。直接編集はできません。');
       return;
     }
+    if (t?.cardPayoutKey) {
+      alert('この記録はカード引落の✅（振替完了）です。カードタブの✅から解除してください。');
+      return;
+    }
   }
   editingAccountTxId = id;
   document.getElementById('accountTxTitle').textContent = id ? '口座入出金を編集' : '口座 入出金';
@@ -4518,6 +4636,10 @@ window.deleteAccountTx = (id) => {
   }
   if (t?.parentTxId) {
     alert('この記録は手数料です。元の取引（振込・引き下ろし・移動）を削除すると一緒に消えます。');
+    return;
+  }
+  if (t?.cardPayoutKey) {
+    alert('この記録はカード引落の✅（振替完了）です。カードタブの✅から解除してください。');
     return;
   }
 
@@ -4997,6 +5119,7 @@ window.openSettingEditModal = (id, type) => {
   const billingDayRow = document.getElementById('editSettingBillingDayRow');
   const debitRow = document.getElementById('editSettingDebitRow');
   const debitAccountRow = document.getElementById('editSettingDebitAccountRow');
+  const payoutAccountRow = document.getElementById('editSettingPayoutAccountRow');
   if (type === 'card') {
     billingDayRow.style.display = '';
     document.getElementById('editSettingBillingDay').value = item.billingDay || '';
@@ -5006,10 +5129,16 @@ window.openSettingEditModal = (id, type) => {
     const debitSel = document.getElementById('editSettingDebitAccountId');
     debitSel.innerHTML = settings.accounts.map(a => `<option value="${a.id}"${item.debitAccountId === a.id ? ' selected' : ''}>${a.name}</option>`).join('');
     debitAccountRow.style.display = isDebit ? '' : 'none';
+    // カード引落口座（✅振替完了の出金元）。デビットと異なり常時表示・未設定可
+    payoutAccountRow.style.display = '';
+    const payoutSel = document.getElementById('editSettingPayoutAccountId');
+    payoutSel.innerHTML = '<option value="">-- 未設定 --</option>' +
+      settings.accounts.map(a => `<option value="${a.id}"${item.payoutAccountId === a.id ? ' selected' : ''}>${a.name}</option>`).join('');
   } else {
     billingDayRow.style.display = 'none';
     debitRow.style.display = 'none';
     debitAccountRow.style.display = 'none';
+    payoutAccountRow.style.display = 'none';
   }
   openModal('settingEditModal');
   setTimeout(() => document.getElementById('editSettingCancelBtn').focus(), 50);
@@ -5032,6 +5161,7 @@ window.saveSettingEdit = async () => {
     const isDebit = document.getElementById('editSettingIsDebit').checked;
     data.isDebit = isDebit;
     data.debitAccountId = isDebit ? (document.getElementById('editSettingDebitAccountId').value || null) : null;
+    data.payoutAccountId = document.getElementById('editSettingPayoutAccountId').value || null;
   }
   await updateDoc(doc(db, 'kakeibo_settings', editingSettingId), data);
   closeModal('settingEditModal');
