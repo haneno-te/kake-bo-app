@@ -667,7 +667,7 @@
   </div>
   <div class="tab-row">
     <button class="tab-btn" onclick="switchTab('card')">💳 カード</button>
-    <button class="tab-btn" onclick="switchTab('fixed')">📌 固定費</button>
+    <button class="tab-btn" onclick="switchTab('fixed')">🔁 定期</button>
     <button class="tab-btn" onclick="switchTab('summary')">📊 集計</button>
     <button class="tab-btn" onclick="switchTab('settings')">⚙️ 設定</button>
   </div>
@@ -803,7 +803,7 @@
 <!-- 固定費タブ -->
 <div class="tab-content" id="tab-fixed">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-    <div style="font-size:13px;font-weight:700;">固定費・定期支出</div>
+    <div style="font-size:13px;font-weight:700;">定期支払い</div>
     <button class="btn-sm exp" onclick="openFixedModal()">＋ 追加</button>
   </div>
   <div id="fixedList"><div class="loading">データなし</div></div>
@@ -1460,7 +1460,7 @@
 <div class="modal-overlay" id="fixedModal">
   <div class="modal-sheet">
     <div class="modal-header">
-      <div class="modal-title" id="fixedModalTitle">固定費を追加</div>
+      <div class="modal-title" id="fixedModalTitle">定期を追加</div>
       <button class="modal-close" onclick="closeModal('fixedModal')">×</button>
     </div>
     <div class="form-row">
@@ -3250,16 +3250,16 @@ window.onCardConfirmedUncheck = (itemId, checkbox) => {
 // ===== 固定費タブ =====
 function renderFixedTab() {
   const list = document.getElementById('fixedList');
-  if (fixedCosts.length === 0) {
-    list.innerHTML = '<div class="loading">データなし</div>';
-    return;
-  }
   const ym = currentYM();
   const ymStart = ym + '-01';
   const nextM = currentMonth === 12
     ? `${currentYear+1}-01-01`
     : `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
-  list.innerHTML = fixedCosts.map((f, i) => {
+
+  const masterRows = [];
+  const unregRows = [];
+
+  fixedCosts.forEach((f, i) => {
     const catName = settings.categories.find(c => c.id === f.category)?.name || '';
     const kindLabel = f.kind === 'work' ? '仕事' : 'プライベート';
     const payDayLabel = f.payDay ? `毎月${f.payDay}日` : '';
@@ -3277,23 +3277,19 @@ function renderFixedTab() {
     } else if (f.payMethod) {
       isRegistered = expenses.some(e => e.fixedCostId === f.id && !isFixedFeeRecord(e) && e.date >= ymStart && e.date < nextM);
     }
-    let registerCell = '';
+    const registerBtn = f.payMethod === 'card' && !isDebitFix
+      ? `<button class="btn-sm accent" onclick="openFixedPayModal('${f.id}')" style="flex-shrink:0;">📥 今月分を登録</button>`
+      : f.payMethod
+      ? `<button class="btn-sm accent" onclick="openFixedExpenseModal('${f.id}')" style="flex-shrink:0;">📝 支払いを記録</button>`
+      : '';
     const registeredLabel = `<label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--income);flex-shrink:0;cursor:pointer;">
   <input type="checkbox" checked style="accent-color:var(--income);width:14px;height:14px;" onchange="unregisterFixed('${f.id}',this)">
   登録済み
 </label>`;
-    if (f.payMethod === 'card' && !isDebitFix) {
-      registerCell = isRegistered
-        ? registeredLabel
-        : `<button class="btn-sm accent" onclick="openFixedPayModal('${f.id}')" style="flex-shrink:0;">📥 今月分を登録</button>`;
-    } else if (f.payMethod) {
-      registerCell = isRegistered
-        ? registeredLabel
-        : `<button class="btn-sm accent" onclick="openFixedExpenseModal('${f.id}')" style="flex-shrink:0;">📝 支払いを記録</button>`;
-    }
+    const registerCell = f.payMethod ? (isRegistered ? registeredLabel : registerBtn) : '';
 
     const isWorkFix = f.kind === 'work';
-    return `<div class="fixed-item${isWorkFix ? ' work-edge' : ''}">
+    masterRows.push(`<div class="fixed-item${isWorkFix ? ' work-edge' : ''}">
       <div style="display:flex;flex-direction:column;gap:2px;margin-right:6px;">
         <button class="btn-order" onclick="moveFixed(${i},-1)">▲</button>
         <button class="btn-order" onclick="moveFixed(${i},1)">▼</button>
@@ -3306,9 +3302,81 @@ function renderFixedTab() {
       ${registerCell}
       <button class="btn-icon-edit" onclick="openFixedModal('${f.id}')">✏️</button>
       <button class="btn-icon-del" onclick="deleteFixed('${f.id}')">🗑️</button>
-    </div>`;
-  }).join('');
+    </div>`);
+
+    // 今月未登録リスト（F2の登録済み判定を共用。表示のみ）
+    if (!isRegistered) {
+      unregRows.push(`<div class="fixed-item${isWorkFix ? ' work-edge' : ''}">
+        <div class="fixed-item-left">
+          <div class="fixed-item-name">${isWorkFix ? WORK_ICON + ' ' : ''}${f.name}</div>
+          ${f.payDay ? `<div class="fixed-item-type">目安 毎月${f.payDay}日</div>` : ''}
+        </div>
+        ${registerBtn || '<span style="font-size:10px;color:var(--text2);">支払い方法未設定（✏️から設定）</span>'}
+      </div>`);
+    }
+  });
+
+  // 今月の登録実績（表示専用の窓。編集・削除は支出タブ／カードタブの既存経路で行う）
+  const nameOf = (fid, fallback) => fixedCosts.find(x => x.id === fid)?.name || fallback || '（不明）';
+  const actualRows = [];
+  expenses
+    .filter(e => e.fixedCostId && !isFixedFeeRecord(e))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    .forEach(e => {
+      const badgeCls = e.payMethod === 'card' ? 'card' : e.payMethod === 'transfer' ? 'transfer' : 'cash';
+      const badgeLabel = e.payMethod === 'card' ? 'カード' : e.payMethod === 'transfer' ? '振込' : '現金';
+      const amtCls = e.payMethod === 'card' ? 'amt-card' : 'amt-cash';
+      actualRows.push(`<div class="fixed-item fixed-actual-row" data-kind="expense" data-id="${e.id}" data-date="${e.date}" style="cursor:pointer;">
+        <div class="fixed-item-left">
+          <div class="fixed-item-name">${nameOf(e.fixedCostId, e.memo)}</div>
+          <div class="fixed-item-type">${e.date} <span class="pay-badge ${badgeCls}">${badgeLabel}</span></div>
+        </div>
+        <div class="${amtCls}" style="font-size:15px;font-weight:700;">¥${(e.amount||0).toLocaleString()}</div>
+      </div>`);
+    });
+  cardPools
+    .filter(p => p.fixedCostId && ((p.month === ym) || (!p.month && p.date && p.date.startsWith(ym))))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    .forEach(p => {
+      const status = p.confirmedMonth
+        ? `<span style="color:var(--income);">確定済み</span>`
+        : `<span style="color:var(--bad);">プール待機</span>`;
+      actualRows.push(`<div class="fixed-item fixed-actual-row" data-kind="pool" data-card-id="${p.cardId || ''}" style="cursor:pointer;">
+        <div class="fixed-item-left">
+          <div class="fixed-item-name">${nameOf(p.fixedCostId, p.memo)}</div>
+          <div class="fixed-item-type">${p.date || ''} <span class="pay-badge card">カード</span> ${status}</div>
+        </div>
+        <div class="amt-card" style="font-size:15px;font-weight:700;">¥${(p.amount||0).toLocaleString()}</div>
+      </div>`);
+    });
+
+  const unregBody = fixedCosts.length === 0
+    ? '<div style="font-size:12px;color:var(--text2);padding:8px 4px;">マスター項目がありません（＋追加から登録）</div>'
+    : (unregRows.length ? unregRows.join('') : '<div style="font-size:12px;color:var(--income);padding:8px 4px;">今月分はすべて登録済み ✅</div>');
+
+  list.innerHTML = `
+    <div class="sec-head" onclick="toggleCardSection(this)">今月未登録 <span class="card-section-arrow" style="font-size:10px;">▼</span></div>
+    <div class="card-section-body">${unregBody}</div>
+    <div class="sec-head" onclick="toggleCardSection(this)">マスター一覧 <span class="card-section-arrow" style="font-size:10px;">▶</span></div>
+    <div class="card-section-body" style="display:none;">${masterRows.length ? masterRows.join('') : '<div class="loading">データなし</div>'}</div>
+    <div class="sec-head" onclick="toggleCardSection(this)">今月の登録実績 <span class="card-section-arrow" style="font-size:10px;">▼</span></div>
+    <div class="card-section-body">${actualRows.length ? actualRows.join('') : '<div style="font-size:12px;color:var(--text2);padding:8px 4px;">今月の登録実績なし</div>'}</div>`;
 }
+
+// 登録実績の行タップ→実データ側へ誘導（イベント委譲・表示専用の窓）
+document.getElementById('fixedList').addEventListener('click', (e) => {
+  const row = e.target.closest('.fixed-actual-row');
+  if (!row) return;
+  if (row.dataset.kind === 'expense') {
+    // 既存のhighlight-jump動線（カレンダー日別パネルで該当レコードをハイライト）
+    switchTab('calendar');
+    setHighlight(row.dataset.id);
+    setTimeout(() => selectDate(row.dataset.date), 100);
+  } else if (row.dataset.kind === 'pool') {
+    if (row.dataset.cardId) goToCardAccordion(row.dataset.cardId);
+    else switchTab('card');
+  }
+});
 
 window.unregisterFixed = (id, checkbox) => {
   checkbox.checked = true; // 確認が完了するまでチェック状態を維持
@@ -3351,7 +3419,7 @@ window.openFixedExpenseModal = (fixedCostId) => {
   const payCard = f.payMethod === 'card' ? settings.cards.find(c => c.id === f.payCardId) : null;
   const isDebitFix = !!(payCard?.isDebit && payCard?.debitAccountId);
   if (f.payMethod === 'card' && !isDebitFix) {
-    alert('この固定費はカード（プール）払いです。「📥 今月分を登録」から登録してください。');
+    alert('この定期項目はカード（プール）払いです。「📥 今月分を登録」から登録してください。');
     return;
   }
   if (!f.payMethod) {
@@ -3414,7 +3482,7 @@ window.saveFixedPay = async () => {
 
   if (f.payMethod === 'card') {
     if (!f.payCardId) {
-      alert('この固定費にカードが設定されていません。固定費の編集でカードを選択してください。');
+      alert('この定期項目にカードが設定されていません。定期の編集でカードを選択してください。');
       return;
     }
     await addDoc(collection(db, 'card_pools'), {
@@ -3433,7 +3501,7 @@ window.saveFixedPay = async () => {
 
 window.openFixedModal = (id = null) => {
   editingFixedId = id;
-  document.getElementById('fixedModalTitle').textContent = id ? '固定費を編集' : '固定費を追加';
+  document.getElementById('fixedModalTitle').textContent = id ? '定期を編集' : '定期を追加';
   if (id) {
     const f = fixedCosts.find(x => x.id === id);
     if (f) {
@@ -3500,10 +3568,10 @@ window.deleteFixed = (id) => {
   const lockedPool = cardPools.find(p => p.fixedCostId === id && p.confirmedMonth &&
     accountTxs.some(t => t.cardPayoutKey === `${p.cardId}_${p.confirmedMonth}`));
   if (lockedPool) {
-    alert('この固定費の確定分は✅（振替完了）済みの月に含まれています。削除するには先にカードタブで✅を解除してください。');
+    alert('この定期項目の確定分は✅（振替完了）済みの月に含まれています。削除するには先にカードタブで✅を解除してください。');
     return;
   }
-  showConfirm('この固定費を削除しますか？登録済みの当月以前の支払い記録もすべて削除されます。', async () => {
+  showConfirm('この定期項目を削除しますか？登録済みの当月以前の支払い記録もすべて削除されます。', async () => {
     const [cpSnap, expSnap, txSnap] = await Promise.all([
       getDocs(collection(db, 'card_pools')),
       getDocs(collection(db, 'expenses')),
@@ -4386,7 +4454,7 @@ window.openAccountTxModal = (id = null, date = null, accountId = null, txType = 
       return;
     }
     if (t?.fixedCostId) {
-      alert('この記録は固定費から自動生成されたものです。固定費タブで親データを編集してください。');
+      alert('この記録は定期支払いから自動生成されたものです。定期タブで親データを編集してください。');
       return;
     }
     if (t?.withdrawTxId) {
@@ -4527,7 +4595,7 @@ window.deleteAccountTx = (id) => {
     return;
   }
   if (t?.fixedCostId) {
-    alert('この記録は固定費から自動生成されたものです。固定費タブで親データを削除してください。');
+    alert('この記録は定期支払いから自動生成されたものです。定期タブで親データを削除してください。');
     return;
   }
   if (t?.withdrawTxId) {
