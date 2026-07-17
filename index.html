@@ -1688,6 +1688,9 @@ let selectedDate = null;
 let _highlightExpenseId = null;
 let _prevMonthIncome = 0;
 let _currMonthIncomeUnchecked = 0;
+let _prevFixedAmounts = {}; // fixedCostId → { amount, date } 前月の同固定費の金額（登録モーダルのプレロード用）
+// 手数料連動レコードの共通除外条件（固定費の登録済み判定・前月額プレロードで共用）
+const isFixedFeeRecord = (r) => (r.memo || '').includes('手数料');
 let expenses = [];
 let incomes = [];
 let accountTxs = [];    // 口座入出金ログ
@@ -2221,10 +2224,20 @@ async function loadMonthData() {
     getDocs(collection(db, 'card_billing_overrides')),
   ]);
 
+  const prevYm = prevYmStart.slice(0, 7);
+  // 前月の同固定費の金額（fixedCostId→日付最新の1件）をプレロード用に収集
+  const prevFixed = {};
+  const considerPrevFixed = (r) => {
+    const cur = prevFixed[r.fixedCostId];
+    if (!cur || (r.date || '') > (cur.date || '')) prevFixed[r.fixedCostId] = { amount: r.amount || 0, date: r.date || '' };
+  };
+
   expenses = [];
   expSnap.forEach(d => {
     const data = { id: d.id, ...d.data() };
     if (data.date >= ymStart && data.date < nextMonth) expenses.push(data);
+    if (data.fixedCostId && !isFixedFeeRecord(data) &&
+        data.date >= prevYmStart && data.date < ymStart) considerPrevFixed(data);
   });
 
   incomes = [];
@@ -2247,7 +2260,12 @@ async function loadMonthData() {
 
   // カードプールは全件（月関係なく表示）
   cardPools = [];
-  cpSnap.forEach(d => cardPools.push({ id: d.id, ...d.data() }));
+  cpSnap.forEach(d => {
+    const data = { id: d.id, ...d.data() };
+    cardPools.push(data);
+    if (data.fixedCostId &&
+        ((data.month === prevYm) || (!data.month && data.date && data.date.startsWith(prevYm)))) considerPrevFixed(data);
+  });
 
   // カード確定は当月
   cardConfirmed = [];
@@ -2268,6 +2286,7 @@ async function loadMonthData() {
 
   _prevMonthIncome = prevMonthIncome;
   _currMonthIncomeUnchecked = currMonthIncomeUnchecked;
+  _prevFixedAmounts = prevFixed;
   renderCalendar();
   renderSummaryBar(prevMonthIncome, currMonthIncomeUnchecked);
   renderExpenseTab();
@@ -3249,22 +3268,25 @@ function renderFixedTab() {
       f.payMethod === 'transfer' ? `口座振込${f.payAccountId ? '（' + (settings.accounts.find(a => a.id === f.payAccountId)?.name || '') + '）' : ''}` : '';
     const payInfo = [payDayLabel, payMethodLabel].filter(Boolean).join(' / ');
 
+    // 登録経路3分岐: カード（非デビット）→プール投入／カード（デビット）→支出モーダル即時経路／振込・現金→支出モーダル
+    const payCard = f.payMethod === 'card' ? settings.cards.find(c => c.id === f.payCardId) : null;
+    const isDebitFix = !!(payCard?.isDebit && payCard?.debitAccountId);
     let isRegistered = false;
-    if (f.payMethod === 'card') {
+    if (f.payMethod === 'card' && !isDebitFix) {
       isRegistered = cardPools.some(p => p.fixedCostId === f.id && p.month === ym);
-    } else if (f.payMethod === 'transfer' || f.payMethod === 'cash') {
-      isRegistered = expenses.some(e => e.fixedCostId === f.id && e.date >= ymStart && e.date < nextM);
+    } else if (f.payMethod) {
+      isRegistered = expenses.some(e => e.fixedCostId === f.id && !isFixedFeeRecord(e) && e.date >= ymStart && e.date < nextM);
     }
     let registerCell = '';
     const registeredLabel = `<label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--income);flex-shrink:0;cursor:pointer;">
   <input type="checkbox" checked style="accent-color:var(--income);width:14px;height:14px;" onchange="unregisterFixed('${f.id}',this)">
   登録済み
 </label>`;
-    if (f.payMethod === 'card') {
+    if (f.payMethod === 'card' && !isDebitFix) {
       registerCell = isRegistered
         ? registeredLabel
         : `<button class="btn-sm accent" onclick="openFixedPayModal('${f.id}')" style="flex-shrink:0;">📥 今月分を登録</button>`;
-    } else if (f.payMethod === 'transfer' || f.payMethod === 'cash') {
+    } else if (f.payMethod) {
       registerCell = isRegistered
         ? registeredLabel
         : `<button class="btn-sm accent" onclick="openFixedExpenseModal('${f.id}')" style="flex-shrink:0;">📝 支払いを記録</button>`;
@@ -3303,15 +3325,20 @@ window.unregisterFixed = (id, checkbox) => {
       if (r.fixedCostId !== id || r.confirmedMonth) return;
       if ((r.month === ym) || (!r.month && r.date && r.date.startsWith(ym))) batch.delete(doc(db, 'card_pools', d.id));
     });
+    const delExpIds = new Set();
     expSnap.forEach(d => {
       const r = d.data();
       if (r.fixedCostId !== id) return;
-      if (r.date && r.date.startsWith(ym)) batch.delete(doc(db, 'expenses', d.id));
+      if (r.date && r.date.startsWith(ym)) { delExpIds.add(d.id); batch.delete(doc(db, 'expenses', d.id)); }
     });
     txSnap.forEach(d => {
       const r = d.data();
-      if (r.fixedCostId !== id) return;
-      if (r.date && r.date.startsWith(ym)) batch.delete(doc(db, 'account_txs', d.id));
+      // fixedCostId直付き（振込連動・手数料）に加え、削除対象支出に紐づくtx
+      // （デビット連動debitExpenseId・振込連動expenseId）も同一バッチで削除
+      const linked = (r.fixedCostId === id && r.date && r.date.startsWith(ym))
+        || (r.debitExpenseId && delExpIds.has(r.debitExpenseId))
+        || (r.expenseId && delExpIds.has(r.expenseId));
+      if (linked) batch.delete(doc(db, 'account_txs', d.id));
     });
     await batch.commit();
     await loadMonthData();
@@ -3321,18 +3348,28 @@ window.unregisterFixed = (id, checkbox) => {
 window.openFixedExpenseModal = (fixedCostId) => {
   const f = fixedCosts.find(x => x.id === fixedCostId);
   if (!f) return;
-  if (f.payMethod !== 'transfer' && f.payMethod !== 'cash') {
-    alert('この固定費は振込／現金払いではありません');
+  const payCard = f.payMethod === 'card' ? settings.cards.find(c => c.id === f.payCardId) : null;
+  const isDebitFix = !!(payCard?.isDebit && payCard?.debitAccountId);
+  if (f.payMethod === 'card' && !isDebitFix) {
+    alert('この固定費はカード（プール）払いです。「📥 今月分を登録」から登録してください。');
+    return;
+  }
+  if (!f.payMethod) {
+    alert('支払い方法を設定してください');
     return;
   }
   openExpenseModal(null);
-  // プリフィル（金額はマスターに持たないため空欄。F2で前月額プレロード予定）
-  calcSet('exp', '');
+  // 前月の同固定費の金額をプレロード（該当なしは空欄）。保存は既存saveExpenseの経路
+  calcSet('exp', _prevFixedAmounts[f.id]?.amount || '');
   document.getElementById('exp-date').value = todayStr();
   setPayMethod(f.payMethod);
   if (f.payMethod === 'transfer' && f.payAccountId) {
     document.getElementById('exp-accountId').value = f.payAccountId;
   }
+  if (f.payMethod === 'card') {
+    document.getElementById('exp-cardId').value = f.payCardId || ''; // デビット：saveExpenseの即時出金経路に乗る
+  }
+  if (f.category) document.getElementById('exp-categoryId').value = f.category;
   document.getElementById('exp-memo').value = f.name;
   setExpType(f.kind === 'work' ? 'work' : 'private');
   // fixedCostId を hidden で保持
@@ -3355,7 +3392,7 @@ window.openFixedPayModal = (id) => {
   if (!f.payMethod) { alert('支払い方法を設定してください'); return; }
   document.getElementById('fixedPayModalTitle').textContent = `${f.name} 今月分を登録`;
   document.getElementById('fp-fixedCostId').value = id;
-  calcSet('fp', ''); // 金額はマスターに持たないため空欄。F2で前月額プレロード予定
+  calcSet('fp', _prevFixedAmounts[id]?.amount || ''); // 前月の同固定費の金額をプレロード（該当なしは空欄）
   openModal('fixedPayModal');
 };
 
