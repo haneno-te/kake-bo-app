@@ -1152,12 +1152,15 @@
       <div class="type-selector" id="expTypeSelector">
         <button class="type-btn active" onclick="setExpType('private')">プライベート</button>
         <button class="type-btn" onclick="setExpType('work')">仕事</button>
-        <button class="type-btn" onclick="setExpType('other')">その他</button>
       </div>
     </div>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--expense);cursor:pointer;margin-bottom:10px;">
       <input type="checkbox" id="exp-noReceipt" style="accent-color:var(--expense);width:16px;height:16px;">
       領収書なし（要確認）
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;margin-bottom:10px;">
+      <input type="checkbox" id="exp-irregular" style="accent-color:var(--text2);width:16px;height:16px;">
+      イレギュラー
     </label>
     <div class="form-row">
       <label class="form-label">お店・場所</label>
@@ -1645,7 +1648,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
-         getDocs, onSnapshot, query, where, orderBy, writeBatch, deleteField }
+         getDoc, getDocs, onSnapshot, query, where, orderBy, writeBatch, deleteField }
   from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -2626,13 +2629,14 @@ function buildExpenseCompact(e) {
 
   const shopDisplay = e.shop || e.memo || '（店名なし）';
   const noReceiptBadge = e.noReceipt ? `<span style="font-size:10px;color:var(--expense);background:rgba(255,107,107,0.15);border-radius:3px;padding:1px 5px;margin-left:4px;">領収書なし</span>` : '';
+  const irregularBadge = e.irregular ? `<span style="font-size:10px;color:var(--text2);border:1px solid var(--text2);background:none;border-radius:3px;padding:0 5px;margin-left:4px;">イレギュラー</span>` : '';
   const row2Parts = [`<span class="pay-badge ${payBadgeClass}">${payLabel}</span>`, typeLabel];
 
   const isWork = e.type === 'work';
   const amtCls = e.payMethod === 'card' ? ' amt-card' : ' amt-cash'; // 現金・振込=緑 / カード=紫
   return `<div class="exp-item${_highlightExpenseId === e.id ? ' highlight-jump' : ''}${isWork ? ' work-edge' : ''}">
     <div class="exp-item-row1">
-      <span class="exp-item-shop">${isWork ? WORK_ICON + ' ' : ''}${hasBad ? '👿 ' : ''}${shopDisplay}${noReceiptBadge}</span>
+      <span class="exp-item-shop">${isWork ? WORK_ICON + ' ' : ''}${hasBad ? '👿 ' : ''}${shopDisplay}${noReceiptBadge}${irregularBadge}</span>
       <span class="exp-item-amount${amtCls}">¥${(e.amount||0).toLocaleString()}</span>
     </div>
     <div class="exp-item-row2">${row2Parts.join(' / ')}</div>
@@ -2994,6 +2998,21 @@ window.onCardPoolCheck = (id, checkbox) => {
   }, 400);
 };
 
+// カード手数料の種別継承：プールの親支出type→固定費kind→'private'の順で解決
+// （親支出は別月の可能性があり当月ロード配列に無いためgetDocで直接取得）
+async function inheritPoolExpType(c) {
+  if (c.expenseId) {
+    const snap = await getDoc(doc(db, 'expenses', c.expenseId));
+    const t = snap.exists() ? snap.data().type : null;
+    if (t === 'work' || t === 'private') return t;
+  }
+  if (c.fixedCostId) {
+    const f = fixedCosts.find(x => x.id === c.fixedCostId);
+    if (f?.kind === 'work' || f?.kind === 'private') return f.kind;
+  }
+  return 'private';
+}
+
 window.confirmCardPayment = async () => {
   if (cardConfirmGuard) return; // モーダル開直後の誤実行防止
   const c = cardPools.find(x => x.id === cardConfirmTargetId);
@@ -3027,7 +3046,7 @@ window.confirmCardPayment = async () => {
         amount: feeAmt,
         shop: '',
         memo: '分割手数料',
-        type: 'other',
+        type: await inheritPoolExpType(c),
         payMethod: 'transfer',
         accountId: '',
         breakdowns: [],
@@ -3042,7 +3061,7 @@ window.confirmCardPayment = async () => {
     if (feeAmt > 0) {
       await addDoc(collection(db, 'expenses'), {
         date: month + '-01', amount: feeAmt, shop: '',
-        memo: 'カード手数料', type: 'other', payMethod: 'transfer',
+        memo: 'カード手数料', type: await inheritPoolExpType(c), payMethod: 'transfer',
         accountId: '', breakdowns: [], noReceipt: false, poolId: c.id
       });
     }
@@ -3800,6 +3819,7 @@ window.openExpenseModal = (id = null, date = null) => {
     if (e.payMethod === 'transfer') document.getElementById('exp-accountId').value = e.accountId || '';
     setExpType(e.type || 'private');
     document.getElementById('exp-noReceipt').checked = e.noReceipt || false;
+    document.getElementById('exp-irregular').checked = e.irregular || false;
     const bList = document.getElementById('expBreakdownList');
     bList.innerHTML = '';
     (e.breakdowns||[]).forEach(b => appendBreakdownRow(b));
@@ -3826,6 +3846,7 @@ window.openExpenseModal = (id = null, date = null) => {
     setPayMethod('cash');
     setExpType('private');
     document.getElementById('exp-noReceipt').checked = false;
+    document.getElementById('exp-irregular').checked = false;
     let _h2 = document.getElementById('exp-fixedCostId');
     if (!_h2) {
       _h2 = document.createElement('input');
@@ -3875,9 +3896,10 @@ window.saveExpense = async () => {
   _bdOverrideOnce = false;
 
   const noReceipt = document.getElementById('exp-noReceipt').checked;
+  const irregular = document.getElementById('exp-irregular').checked;
   const data = {
     date, amount, shop, memo,
-    type: currentExpType, payMethod: currentPayMethod, breakdowns, noReceipt
+    type: currentExpType, payMethod: currentPayMethod, breakdowns, noReceipt, irregular
   };
   if (currentPayMethod === 'card') data.cardId = document.getElementById('exp-cardId').value;
   if (currentPayMethod === 'transfer') data.accountId = document.getElementById('exp-accountId').value;
@@ -4018,7 +4040,8 @@ window.saveExpense = async () => {
         const feeMemo = `${memo} 振込手数料`;
         await addDoc(collection(db, 'expenses'), {
           date, amount: feeAmt, shop: '', memo: feeMemo,
-          type: 'other', payMethod: 'transfer', accountId: data.accountId,
+          type: data.type === 'work' ? 'work' : 'private',
+          payMethod: 'transfer', accountId: data.accountId,
           breakdowns: [], noReceipt: false, fixedCostId: data.fixedCostId
         });
         await addDoc(collection(db, 'account_txs'), {
@@ -4549,7 +4572,7 @@ window.saveAccountTx = async () => {
       });
       await addDoc(collection(db, 'expenses'), {
         date, amount: feeAmt, shop: '', memo: '銀行手数料',
-        type: 'other', payMethod: 'transfer', accountId, breakdowns: [], noReceipt: false, parentTxId: parentId
+        type: 'private', payMethod: 'transfer', accountId, breakdowns: [], noReceipt: false, parentTxId: parentId
       });
       showToast(`手数料 ¥${feeAmt.toLocaleString()} を記録しました`);
     }
@@ -5372,9 +5395,11 @@ window.setPayMethod = (method) => {
 };
 
 window.setExpType = (type) => {
+  // 'other'は選択肢廃止済み（既存データ用）：どのボタンもactiveにせず値だけ保持し、
+  // ユーザーが2択をタップし直した場合のみ新値で上書きされる
   currentExpType = type;
   document.querySelectorAll('#expTypeSelector .type-btn').forEach((btn, i) => {
-    btn.classList.toggle('active', ['private','work','other'][i] === type);
+    btn.classList.toggle('active', ['private','work'][i] === type);
   });
 };
 
