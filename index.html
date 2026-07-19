@@ -5413,6 +5413,12 @@ function clearHighlight() {
   if (document.getElementById('tab-expenses').classList.contains('active')) renderExpenseTab();
 }
 
+// ジャンプ先の伝票カードを画面中央へスクロール（selectDateの同期描画後に呼ぶ）
+function scrollToHighlight() {
+  const el = document.querySelector('.highlight-jump');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 window.openBreakdownJumpModal = (itemName, catId, label = '') => {
   const matched = expenses
     .map(e => {
@@ -5427,7 +5433,7 @@ window.openBreakdownJumpModal = (itemName, catId, label = '') => {
   if (matched.length === 1) {
     switchTab('calendar');
     setHighlight(matched[0].e.id);
-    setTimeout(() => selectDate(matched[0].e.date), 100);
+    setTimeout(() => { selectDate(matched[0].e.date); scrollToHighlight(); }, 100);
     return;
   }
   document.getElementById('bdJumpModalTitle').textContent = `${label || itemName}（${matched.length}件）`;
@@ -5446,7 +5452,7 @@ window.openBreakdownJumpModal = (itemName, catId, label = '') => {
       closeModal('bdJumpModal');
       switchTab('calendar');
       setHighlight(e.id);
-      setTimeout(() => selectDate(e.date), 100);
+      setTimeout(() => { selectDate(e.date); scrollToHighlight(); }, 100);
     });
     listEl.appendChild(row);
   });
@@ -5605,11 +5611,15 @@ window.removeBreakdownRowWithConfirm = (btn) => {
 };
 
 // ===== トースト =====
+// タイマーは共有1本で管理：先行トーストの消去タイマーが後続トーストを
+// 表示直後に消してしまう競合（連続保存時に重複トースト等が見えなくなる）を防ぐ
+let _toastTimer = null;
 function showToast(msg) {
   const el = document.getElementById('toastEl');
   el.textContent = msg;
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2500);
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
 }
 
 // ===== 起動 =====
