@@ -4205,6 +4205,27 @@ function selectBdChip(chip) {
   row.querySelector('.bd-name-input').value = '';
 }
 
+// ✅ON時の即時フィードバック（保存時の登録ループは二重防御として現行維持）
+function onBdItemRegisterToggle(check) {
+  if (!check.checked) return;
+  const row = check.closest('.breakdown-row');
+  const name = row.querySelector('.bd-name-input')?.value.trim() || '';
+  if (!name) {
+    showToast('細目名を入力してください');
+    check.checked = false;
+    return;
+  }
+  const catId = row.dataset.cat || '__none__';
+  const groupId = catId === '__none__' ? null : catId;
+  const dup = settings.bdItems.find(i => i.name === name && (i.groupId || null) === groupId);
+  if (dup) {
+    showToast(`細目「${name}」はすでに登録済みです`);
+    check.checked = false;
+  } else {
+    showToast(`保存時に細目「${name}」をテンプレ登録します`);
+  }
+}
+
 function onBdItemSelChange(sel) {
   const row = sel.closest('.breakdown-row');
   const opt = sel.options[sel.selectedIndex];
@@ -4235,6 +4256,7 @@ _bdListEl.addEventListener('click', (e) => {
 _bdListEl.addEventListener('change', (e) => {
   if (e.target.classList.contains('bd-item-sel')) onBdItemSelChange(e.target);
   else if (e.target.classList.contains('bad-check')) toggleBadRow(e.target);
+  else if (e.target.classList.contains('bd-item-register')) onBdItemRegisterToggle(e.target);
 });
 
 window.addBreakdownRow = () => {
