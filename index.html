@@ -903,11 +903,6 @@
     <div style="font-size:11px;color:var(--text2);margin-top:4px;text-align:right;" id="workRatioLabel">仕事 0%</div>
   </div>
 
-  <div class="card" id="catSummaryCard" style="display:none;">
-    <div class="card-title">費目別内訳</div>
-    <div id="catBreakdown"></div>
-  </div>
-
   <div class="card" id="breakdownSummaryCard">
     <div class="card-title">内訳別集計</div>
     <div id="breakdownSummary"></div>
@@ -929,31 +924,6 @@
 
 <!-- 設定タブ -->
 <div class="tab-content" id="tab-settings">
-
-  <div class="accordion-section">
-    <div class="accordion-header" onclick="toggleAccordion(this)">
-      <span>費目（支出カテゴリ）</span><span class="accordion-arrow">▼</span>
-    </div>
-    <div class="accordion-body" style="display:none;">
-      <div style="font-size:11px;color:var(--income);margin-bottom:6px;">カテゴリ追加：</div>
-      <div class="add-item-row add-item-row-group" style="margin-bottom:10px;">
-        <input type="text" id="newCatGroupInput" placeholder="カテゴリ名（例：食費）">
-        <button onclick="addCatGroup()">追加</button>
-      </div>
-      <div style="font-size:11px;color:var(--accent);margin-bottom:4px;">費目追加：</div>
-      <div class="add-item-row">
-        <select id="newCategoryGroupSel" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;-webkit-appearance:none;">
-          <option value="">カテゴリなし</option>
-        </select>
-        <input type="text" id="newCategoryInput" placeholder="費目名" style="flex:2;">
-        <button onclick="addCategory()">追加</button>
-      </div>
-      <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
-        <button class="btn-sm" id="toggleHidden_categories" onclick="toggleShowHidden('categories')">👁 非表示項目を表示する</button>
-      </div>
-      <div class="setting-list" id="categoryList"></div>
-    </div>
-  </div>
 
   <div class="accordion-section">
     <div class="accordion-header" onclick="toggleAccordion(this)">
@@ -1168,12 +1138,6 @@
       <input type="checkbox" id="exp-noReceipt" style="accent-color:var(--expense);width:16px;height:16px;">
       領収書なし（要確認）
     </label>
-    <div class="form-row" style="display:none;">
-      <label class="form-label">費目</label>
-      <select class="form-select" id="exp-categoryId">
-        <option value="">-- 選択（任意）--</option>
-      </select>
-    </div>
     <div class="form-row">
       <label class="form-label">お店・場所</label>
       <select class="form-select" id="exp-shopSelect" onchange="onExpShopSelectChange()" style="margin-bottom:6px;">
@@ -1468,12 +1432,6 @@
       <input type="text" class="form-input" id="fix-name" placeholder="例：家賃、電気代">
     </div>
     <div class="form-row">
-      <label class="form-label">カテゴリ（任意）</label>
-      <select class="form-select" id="fix-categoryId">
-        <option value="">-- 選択（任意）--</option>
-      </select>
-    </div>
-    <div class="form-row">
       <label class="form-label">種別（公私）</label>
       <div class="type-selector">
         <button class="type-btn active" onclick="setFixKind('private')" id="fkPrivate">プライベート</button>
@@ -1699,7 +1657,6 @@ let cardConfirmed = []; // カード引き落とし確定
 let fixedCosts = [];
 let cardBillingOverrides = []; // カード引き落とし日当月上書き
 let settings = {
-  categories: [], catGroups: [],
   incomeTypes: [],
   shops: [], shopGroups: [],
   accounts: [],
@@ -1939,12 +1896,10 @@ function loadSettings() {
   return new Promise((resolve) => {
     let firstFire = true;
     onSnapshot(collection(db, 'kakeibo_settings'), (snap) => {
-      settings = { categories:[], catGroups:[], incomeTypes:[], shops:[], shopGroups:[], accounts:[], cards:[], badCategories:[], bdCatGroups:[], bdItems:[] };
+      settings = { incomeTypes:[], shops:[], shopGroups:[], accounts:[], cards:[], badCategories:[], bdCatGroups:[], bdItems:[] };
       snap.forEach(d => {
         const data = { id: d.id, ...d.data() };
-        if (data._type === 'category') settings.categories.push(data);
-        else if (data._type === 'catGroup') settings.catGroups.push(data);
-        else if (data._type === 'incomeType') settings.incomeTypes.push(data);
+        if (data._type === 'incomeType') settings.incomeTypes.push(data);
         else if (data._type === 'shop') settings.shops.push(data);
         else if (data._type === 'shopGroup') settings.shopGroups.push(data);
         else if (data._type === 'account') settings.accounts.push(data);
@@ -1953,7 +1908,7 @@ function loadSettings() {
         else if (data._type === 'bdCatGroup') settings.bdCatGroups.push(data);
         else if (data._type === 'bdItem') settings.bdItems.push(data);
       });
-      ['categories','catGroups','incomeTypes','shops','shopGroups','accounts','cards','badCategories','bdCatGroups','bdItems'].forEach(k => {
+      ['incomeTypes','shops','shopGroups','accounts','cards','badCategories','bdCatGroups','bdItems'].forEach(k => {
         settings[k].sort((a,b) => (a.order||0) - (b.order||0));
       });
       renderSettings();
@@ -1964,40 +1919,6 @@ function loadSettings() {
 }
 
 function populateSelects() {
-  // 費目
-  const catSel = document.getElementById('exp-categoryId');
-  catSel.innerHTML = '<option value="">-- 選択（任意）--</option>';
-  settings.catGroups.forEach(g => {
-    const items = settings.categories.filter(c => c.groupId === g.id && !c.hidden);
-    if (items.length) {
-      catSel.innerHTML += `<optgroup label="${g.name}">` +
-        items.map(c => `<option value="${c.id}">${c.name}</option>`).join('') + '</optgroup>';
-    }
-  });
-  const ungrouped = settings.categories.filter(c => !c.groupId && !c.hidden);
-  ungrouped.forEach(c => { catSel.innerHTML += `<option value="${c.id}">${c.name}</option>`; });
-
-  // 固定費カテゴリ（支出モーダルの費目と同じ選択肢構成）
-  const fixCatSel = document.getElementById('fix-categoryId');
-  if (fixCatSel) {
-    fixCatSel.innerHTML = '<option value="">-- 選択（任意）--</option>';
-    settings.catGroups.forEach(g => {
-      const items = settings.categories.filter(c => c.groupId === g.id && !c.hidden);
-      if (items.length) {
-        fixCatSel.innerHTML += `<optgroup label="${g.name}">` +
-          items.map(c => `<option value="${c.id}">${c.name}</option>`).join('') + '</optgroup>';
-      }
-    });
-    settings.categories.filter(c => !c.groupId && !c.hidden).forEach(c => {
-      fixCatSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
-    });
-  }
-
-  // 費目グループ選択（設定）
-  const catGSel = document.getElementById('newCategoryGroupSel');
-  catGSel.innerHTML = '<option value="">カテゴリなし</option>';
-  settings.catGroups.forEach(g => { catGSel.innerHTML += `<option value="${g.id}">${g.name}</option>`; });
-
   // お店テンプレ
   const shopSel = document.getElementById('exp-shopSelect');
   shopSel.innerHTML = '<option value="">-- テンプレから選択 --</option>';
@@ -2438,7 +2359,6 @@ function renderDayPanel(dateStr) {
 }
 
 function buildExpenseCard(e, showActions = true) {
-  const catName = settings.categories.find(c => c.id === e.categoryId)?.name || '';
   const noReceiptBadge = e.noReceipt ? `<span style="font-size:10px;color:var(--expense);background:rgba(255,107,107,0.15);border-radius:3px;padding:1px 5px;margin-left:4px;">領収書なし</span>` : '';
   const typeLabel = e.type === 'work' ? '仕事' : e.type === 'other' ? 'その他' : 'プライベート';
   const payLabel = e.payMethod === 'card' ? (settings.cards.find(c => c.id === e.cardId)?.name || 'カード') :
@@ -2476,7 +2396,7 @@ function buildExpenseCard(e, showActions = true) {
   return `<div class="record-item${_highlightExpenseId === e.id ? ' highlight-jump' : ''}${isWork ? ' work-edge' : ''}">
     <div class="record-top">
       <div class="record-left">
-        <div class="record-category">${catName}${catName?' · ':''}${typeLabel}</div>
+        <div class="record-category">${typeLabel}</div>
         <div class="record-memo">${isWork ? WORK_ICON + ' ' : ''}${e.shop || e.memo || '（メモなし）'}</div>
         ${(e.shop && e.memo) ? `<div class="record-sub">${e.memo}${noReceiptBadge}</div>` : (noReceiptBadge ? `<div class="record-sub">${noReceiptBadge}</div>` : '')}
         <div><span class="pay-badge ${payBadgeClass}">${payLabel}</span></div>
@@ -2644,7 +2564,6 @@ function renderExpenseTab() {
 }
 
 function buildExpenseCompact(e) {
-  const catName = settings.categories.find(c => c.id === e.categoryId)?.name || '';
   const typeLabel = e.type === 'work' ? '仕事' : e.type === 'other' ? 'その他' : 'プライベート';
   const payLabel = e.payMethod === 'card'
     ? (settings.cards.find(c => c.id === e.cardId)?.name || 'カード')
@@ -2677,7 +2596,6 @@ function buildExpenseCompact(e) {
   const shopDisplay = e.shop || e.memo || '（店名なし）';
   const noReceiptBadge = e.noReceipt ? `<span style="font-size:10px;color:var(--expense);background:rgba(255,107,107,0.15);border-radius:3px;padding:1px 5px;margin-left:4px;">領収書なし</span>` : '';
   const row2Parts = [`<span class="pay-badge ${payBadgeClass}">${payLabel}</span>`, typeLabel];
-  if (catName) row2Parts.push(catName);
 
   const isWork = e.type === 'work';
   const amtCls = e.payMethod === 'card' ? ' amt-card' : ' amt-cash'; // 現金・振込=緑 / カード=紫
@@ -3076,7 +2994,6 @@ window.confirmCardPayment = async () => {
       await addDoc(collection(db, 'expenses'), {
         date: month + '-01',
         amount: feeAmt,
-        categoryId: '',
         shop: '',
         memo: '分割手数料',
         type: 'other',
@@ -3093,7 +3010,7 @@ window.confirmCardPayment = async () => {
     const feeAmt = parseInt(document.getElementById('ccFeeInput').value) || 0;
     if (feeAmt > 0) {
       await addDoc(collection(db, 'expenses'), {
-        date: month + '-01', amount: feeAmt, categoryId: '', shop: '',
+        date: month + '-01', amount: feeAmt, shop: '',
         memo: 'カード手数料', type: 'other', payMethod: 'transfer',
         accountId: '', breakdowns: [], noReceipt: false, poolId: c.id
       });
@@ -3260,7 +3177,6 @@ function renderFixedTab() {
   const unregRows = [];
 
   fixedCosts.forEach((f, i) => {
-    const catName = settings.categories.find(c => c.id === f.category)?.name || '';
     const kindLabel = f.kind === 'work' ? '仕事' : 'プライベート';
     const payDayLabel = f.payDay ? `毎月${f.payDay}日` : '';
     const payMethodLabel = f.payMethod === 'cash' ? '現金' :
@@ -3296,7 +3212,7 @@ function renderFixedTab() {
       </div>
       <div class="fixed-item-left">
         <div class="fixed-item-name">${isWorkFix ? WORK_ICON + ' ' : ''}${f.name}</div>
-        <div class="fixed-item-type">${[catName, kindLabel].filter(Boolean).join(' · ')}</div>
+        <div class="fixed-item-type">${kindLabel}</div>
         ${payInfo ? `<div class="fixed-item-type" style="color:var(--accent);margin-top:1px;">${payInfo}</div>` : ''}
       </div>
       ${registerCell}
@@ -3437,7 +3353,6 @@ window.openFixedExpenseModal = (fixedCostId) => {
   if (f.payMethod === 'card') {
     document.getElementById('exp-cardId').value = f.payCardId || ''; // デビット：saveExpenseの即時出金経路に乗る
   }
-  if (f.category) document.getElementById('exp-categoryId').value = f.category;
   document.getElementById('exp-memo').value = f.name;
   setExpType(f.kind === 'work' ? 'work' : 'private');
   // fixedCostId を hidden で保持
@@ -3506,7 +3421,6 @@ window.openFixedModal = (id = null) => {
     const f = fixedCosts.find(x => x.id === id);
     if (f) {
       document.getElementById('fix-name').value = f.name || '';
-      document.getElementById('fix-categoryId').value = f.category || '';
       setFixKind(f.kind || 'private');
       document.getElementById('fix-payDay').value = f.payDay || '';
       if (f.payMethod) {
@@ -3524,7 +3438,6 @@ window.openFixedModal = (id = null) => {
     }
   } else {
     document.getElementById('fix-name').value = '';
-    document.getElementById('fix-categoryId').value = '';
     setFixKind('private');
     document.getElementById('fix-payDay').value = '';
     currentFixPayMethod = null;
@@ -3538,14 +3451,13 @@ window.openFixedModal = (id = null) => {
 window.saveFixed = async () => {
   const name = document.getElementById('fix-name').value.trim();
   if (!name) { alert('項目名は必須です'); return; }
-  const category = document.getElementById('fix-categoryId').value || null;
   const payDay = parseInt(document.getElementById('fix-payDay').value) || null;
   const payMethod = currentFixPayMethod || null;
   const payCardId = payMethod === 'card' ? (document.getElementById('fix-payCardId').value || null) : null;
   if (payMethod === 'card' && !payCardId) { alert('支払い方法がカードの場合はカードを選択してください'); return; }
   const payAccountId = payMethod === 'transfer' ? (document.getElementById('fix-payAccountId').value || null) : null;
-  // マスターは項目情報のみ（F1）。金額はここでは持たず、子データが唯一の事実
-  const data = { name, category, kind: currentFixKind, payDay, payMethod, payCardId, payAccountId };
+  // マスターは項目情報のみ。金額はここでは持たず、子データが唯一の事実
+  const data = { name, kind: currentFixKind, payDay, payMethod, payCardId, payAccountId };
 
   if (editingFixedId) {
     // 過去の子データ（expenses/card_pools/account_txs）には一切触れない。
@@ -3623,7 +3535,7 @@ function renderSummary() {
 
   const ms = calcMonthSummary(ym, _prevMonthIncome);
 
-  // Keep totalExp for downstream calculations (workRatio, catBreakdown, etc.)
+  // Keep totalExp for downstream calculations (workRatio etc.)
   const totalExp = expenses.reduce((s, e) => s + (e.amount || 0), 0);
   const totalFixed = fixedCosts.reduce((s, f) => {
     if (f.payMethod === 'card') {
@@ -3694,25 +3606,6 @@ function renderSummary() {
         <span class="stat-value" style="color:var(--bad);">¥${v.total.toLocaleString()} <span style="font-size:10px;color:var(--text2);">${pct}%</span></span>
       </div>`;
     }).join('') || '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">BAD記録なし</div>';
-
-  // 費目別集計
-  const catTotals = {};
-  expenses.forEach(e => {
-    const catName = settings.categories.find(c => c.id === e.categoryId)?.name
-      || (e.categoryId ? '削除済み' : '未設定');
-    if (!catTotals[catName]) catTotals[catName] = 0;
-    catTotals[catName] += e.amount || 0;
-  });
-  const catBreakdownEl = document.getElementById('catBreakdown');
-  if (catBreakdownEl) {
-    const sorted = Object.entries(catTotals).sort((a,b) => b[1] - a[1]);
-    catBreakdownEl.innerHTML = sorted.length > 0
-      ? sorted.map(([name, total]) => `<div class="stat-row">
-          <span class="stat-label">${name}</span>
-          <span class="stat-value" style="color:var(--expense);">¥${total.toLocaleString()}</span>
-        </div>`).join('')
-      : '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">支出データなし</div>';
-  }
 
   // 内訳別集計（カテゴリアコーディオン）
   const bdCatMap = {};
@@ -3865,7 +3758,6 @@ window.openExpenseModal = (id = null, date = null) => {
     if (!e) return;
     calcSet('exp', e.amount || '');
     document.getElementById('exp-date').value = e.date || todayStr();
-    document.getElementById('exp-categoryId').value = e.categoryId || '';
     document.getElementById('exp-shop').value = e.shop || '';
     document.getElementById('exp-shopSelect').value = '';
     document.getElementById('exp-shopRegister').checked = false;
@@ -3893,7 +3785,6 @@ window.openExpenseModal = (id = null, date = null) => {
   } else {
     calcSet('exp', '');
     document.getElementById('exp-date').value = date || todayStr();
-    document.getElementById('exp-categoryId').value = '';
     document.getElementById('exp-shop').value = '';
     document.getElementById('exp-shopSelect').value = '';
     document.getElementById('exp-shopRegister').checked = false;
@@ -3921,7 +3812,6 @@ window.openExpenseModal = (id = null, date = null) => {
 window.saveExpense = async () => {
   const amount = calcGetValue('exp');
   const date = document.getElementById('exp-date').value;
-  const categoryId = document.getElementById('exp-categoryId').value;
   const shop = document.getElementById('exp-shop').value.trim();
   const memo = document.getElementById('exp-memo').value.trim();
   if (!amount || !date) { alert('金額と日付は必須です'); return; }
@@ -3958,7 +3848,7 @@ window.saveExpense = async () => {
 
   const noReceipt = document.getElementById('exp-noReceipt').checked;
   const data = {
-    date, amount, categoryId, shop, memo,
+    date, amount, shop, memo,
     type: currentExpType, payMethod: currentPayMethod, breakdowns, noReceipt
   };
   if (currentPayMethod === 'card') data.cardId = document.getElementById('exp-cardId').value;
@@ -4099,7 +3989,7 @@ window.saveExpense = async () => {
       if (feeAmt > 0) {
         const feeMemo = `${memo} 振込手数料`;
         await addDoc(collection(db, 'expenses'), {
-          date, amount: feeAmt, categoryId: '', shop: '', memo: feeMemo,
+          date, amount: feeAmt, shop: '', memo: feeMemo,
           type: 'other', payMethod: 'transfer', accountId: data.accountId,
           breakdowns: [], noReceipt: false, fixedCostId: data.fixedCostId
         });
@@ -4568,7 +4458,7 @@ window.saveAccountTx = async () => {
         accountId, txType: 'transfer_out', amount: feeAmt, date, memo: '手数料', parentTxId: parentId
       });
       await addDoc(collection(db, 'expenses'), {
-        date, amount: feeAmt, categoryId: '', shop: '', memo: '銀行手数料',
+        date, amount: feeAmt, shop: '', memo: '銀行手数料',
         type: 'other', payMethod: 'transfer', accountId, breakdowns: [], noReceipt: false, parentTxId: parentId
       });
       showToast(`手数料 ¥${feeAmt.toLocaleString()} を記録しました`);
@@ -4682,70 +4572,6 @@ window.toggleGroupAccordion = (header, lsKey) => {
 };
 
 function renderSettings() {
-  // 費目（カテゴリ別アコーディオン）
-  const catContainer = document.getElementById('categoryList');
-  const showHiddenCats = localStorage.getItem('showHidden_categories') === 'true';
-  const catBtn = document.getElementById('toggleHidden_categories');
-  if (catBtn) catBtn.textContent = showHiddenCats ? '👁 非表示項目を隠す' : '👁 非表示項目を表示する';
-
-  const renderCatItemRows = (items) => items.map(item => {
-    const i = settings.categories.indexOf(item);
-    return `<div class="setting-item${item.hidden?' setting-item-hidden':''}">
-      <div style="display:flex;gap:2px;">
-        <button class="btn-order" onclick="moveSettingItem('category',${i},-1)">▲</button>
-        <button class="btn-order" onclick="moveSettingItem('category',${i},1)">▼</button>
-      </div>
-      <div class="setting-item-name">${item.name}</div>
-      <label style="display:flex;align-items:center;gap:2px;font-size:10px;color:var(--text2);cursor:pointer;white-space:nowrap;">
-        <input type="checkbox" ${item.hidden?'checked':''} onchange="toggleSettingHidden('${item.id}',this.checked)">非表示
-      </label>
-      <button class="btn-icon-edit" onclick="openSettingEditModal('${item.id}','category')">✏️</button>
-      <button class="btn-icon-del" onclick="deleteSettingItem('${item.id}','category')">🗑️</button>
-    </div>`;
-  }).join('');
-
-  let catHtml = '';
-  settings.catGroups.forEach(g => {
-    const catIdx = settings.catGroups.indexOf(g);
-    const visible = settings.categories.filter(c => c.groupId === g.id && !c.hidden);
-    const hidden = settings.categories.filter(c => c.groupId === g.id && c.hidden);
-    const items = showHiddenCats ? [...visible, ...hidden] : visible;
-    const isOpen = localStorage.getItem(`catGroupOpen_${g.id}`) === 'true';
-    catHtml += `<div class="group-accordion">
-      <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'catGroupOpen_${g.id}')">
-        <div style="display:flex;gap:2px;flex-shrink:0;">
-          <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('catGroup',${catIdx},-1)">▲</button>
-          <button class="btn-order" onclick="event.stopPropagation();moveSettingItem('catGroup',${catIdx},1)">▼</button>
-        </div>
-        <span style="flex:1;">📁 ${g.name} <span class="group-badge">${visible.length}</span></span>
-        <div style="display:flex;align-items:center;gap:4px;">
-          <button class="btn-icon-edit" onclick="event.stopPropagation();openSettingEditModal('${g.id}','catGroup')">✏️</button>
-          <button class="btn-icon-del" onclick="event.stopPropagation();deleteSettingItem('${g.id}','catGroup')">🗑️</button>
-          <span class="group-arrow" style="font-size:11px;">${isOpen?'▲':'▼'}</span>
-        </div>
-      </div>
-      <div style="display:${isOpen?'block':'none'};padding:2px 4px 4px;">
-        ${items.length ? renderCatItemRows(items) : '<div style="font-size:12px;color:var(--text2);padding:6px 8px;">（費目なし）</div>'}
-      </div>
-    </div>`;
-  });
-  const ungroupedVisible = settings.categories.filter(c => !c.groupId && !c.hidden);
-  const ungroupedHidden = settings.categories.filter(c => !c.groupId && c.hidden);
-  const ungroupedCats = showHiddenCats ? [...ungroupedVisible, ...ungroupedHidden] : ungroupedVisible;
-  if (ungroupedCats.length) {
-    const isOpen = localStorage.getItem('catGroupOpen_none') === 'true';
-    catHtml += `<div class="group-accordion">
-      <div class="group-accordion-header" onclick="toggleGroupAccordion(this,'catGroupOpen_none')">
-        <span>📁 カテゴリなし <span class="group-badge">${ungroupedVisible.length}</span></span>
-        <span class="group-arrow" style="font-size:11px;">${isOpen?'▲':'▼'}</span>
-      </div>
-      <div style="display:${isOpen?'block':'none'};padding:2px 4px 4px;">
-        ${renderCatItemRows(ungroupedCats)}
-      </div>
-    </div>`;
-  }
-  catContainer.innerHTML = catHtml;
-
   // 収入項目
   renderSimpleSettingList('incomeTypeList', settings.incomeTypes, 'incomeType');
 
@@ -4954,23 +4780,6 @@ window.saveInitBal = async () => {
   showToast(`口座情報を更新しました`);
 };
 
-window.addCatGroup = async () => {
-  const input = document.getElementById('newCatGroupInput');
-  const name = input.value.trim();
-  if (!name) return;
-  await addDoc(collection(db, 'kakeibo_settings'), { _type:'catGroup', name, order: settings.catGroups.length });
-  input.value = '';
-};
-
-window.addCategory = async () => {
-  const input = document.getElementById('newCategoryInput');
-  const name = input.value.trim();
-  const groupId = document.getElementById('newCategoryGroupSel').value;
-  if (!name) return;
-  await addDoc(collection(db, 'kakeibo_settings'), { _type:'category', name, groupId: groupId||null, order: settings.categories.length });
-  input.value = '';
-};
-
 window.addShopGroup = async () => {
   const input = document.getElementById('newShopGroupInput');
   const name = input.value.trim();
@@ -5038,16 +4847,6 @@ window.addBdItem = async () => {
 };
 
 window.deleteSettingItem = (id, type) => {
-  if (type === 'category') {
-    const used = expenses.filter(e => e.categoryId === id);
-    if (used.length > 0) {
-      showConfirm(
-        `この費目は${used.length}件の支出で使用されています。削除すると「削除済み」として集計されます。削除しますか？`,
-        async () => { await deleteDoc(doc(db, 'kakeibo_settings', id)); }
-      );
-      return;
-    }
-  }
   showConfirm('この項目を削除しますか？', async () => {
     await deleteDoc(doc(db, 'kakeibo_settings', id));
   });
@@ -5059,9 +4858,9 @@ let editingSettingType = null;
 
 window.openSettingEditModal = (id, type) => {
   const map = {
-    category: 'categories', shop: 'shops',
+    shop: 'shops',
     badCategory: 'badCategories', incomeType: 'incomeTypes', card: 'cards',
-    catGroup: 'catGroups', shopGroup: 'shopGroups',
+    shopGroup: 'shopGroups',
     bdCatGroup: 'bdCatGroups', bdItem: 'bdItems'
   };
   const item = settings[map[type]]?.find(x => x.id === id);
@@ -5071,15 +4870,14 @@ window.openSettingEditModal = (id, type) => {
   document.getElementById('editSettingName').value = item.name;
   const groupRow = document.getElementById('editSettingGroupRow');
   const groupSel = document.getElementById('editSettingGroupSel');
-  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'catGroup', 'shopGroup', 'bdCatGroup'];
+  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'shopGroup', 'bdCatGroup'];
   if (noGroupTypes.includes(type)) {
     groupRow.style.display = 'none';
     groupSel.innerHTML = '';
   } else {
     groupRow.style.display = '';
     groupSel.innerHTML = '<option value="">カテゴリなし</option>';
-    const groups = type === 'bdItem' ? settings.bdCatGroups
-      : type === 'category' ? settings.catGroups : settings.shopGroups;
+    const groups = type === 'bdItem' ? settings.bdCatGroups : settings.shopGroups;
     groups.forEach(g => {
       groupSel.innerHTML += `<option value="${g.id}"${item.groupId === g.id ? ' selected' : ''}>${g.name}</option>`;
     });
@@ -5120,7 +4918,7 @@ window.onDebitCheckChange = () => {
 window.saveSettingEdit = async () => {
   const name = document.getElementById('editSettingName').value.trim();
   if (!name || !editingSettingId) return;
-  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'catGroup', 'shopGroup', 'bdCatGroup'];
+  const noGroupTypes = ['badCategory', 'incomeType', 'card', 'shopGroup', 'bdCatGroup'];
   const data = noGroupTypes.includes(editingSettingType)
     ? { name }
     : { name, groupId: document.getElementById('editSettingGroupSel').value || null };
@@ -5444,7 +5242,7 @@ window.deleteHealthCheckIssues = () => {
 
 window.moveSettingItem = async (type, i, delta) => {
   const map = {
-    category:'categories', catGroup:'catGroups', incomeType:'incomeTypes',
+    incomeType:'incomeTypes',
     shop:'shops', shopGroup:'shopGroups', account:'accounts', card:'cards', badCategory:'badCategories',
     bdCatGroup:'bdCatGroups', bdItem:'bdItems'
   };
@@ -5453,7 +5251,7 @@ window.moveSettingItem = async (type, i, delta) => {
   if (!item) return;
   // グループ別表示されるtypeは「同じグループ・同じ表示状態(hidden)」の隣接項目まで探索。
   // それ以外のtypeは即隣にマッチ（従来挙動と同等）
-  const groupedTypes = ['shop', 'category', 'bdItem'];
+  const groupedTypes = ['shop', 'bdItem'];
   const sameSection = (a) => !groupedTypes.includes(type)
     ? true
     : ((a.groupId || null) === (item.groupId || null) && !!a.hidden === !!item.hidden);
