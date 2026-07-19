@@ -527,12 +527,33 @@
     border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 13px; outline: none;
   }
   .breakdown-row-top .bd-amount {
-    flex: 0 0 100px; min-width: 0;
+    flex: 1 1 0; min-width: 0;
   }
   .breakdown-row-top button {
     flex: 0 0 32px; background: rgba(255,107,107,0.15); border: none; color: var(--expense);
     border-radius: 6px; padding: 4px 0; cursor: pointer; font-size: 13px;
   }
+  /* 内訳カテゴリチップ */
+  .bd-chip-wrap { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .bd-chip {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text2);
+    border-radius: 14px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+  }
+  .bd-chip.selected {
+    border-color: var(--accent); color: var(--accent);
+    background: rgba(108,143,255,0.15); font-weight: 700;
+  }
+  /* 内訳の細目名（自由入力）＋テンプレ登録行 */
+  .bd-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .bd-name-row input[type=text] {
+    flex: 1 1 0; min-width: 0; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 13px; outline: none;
+  }
+  .bd-name-row label {
+    display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text2);
+    white-space: nowrap; cursor: pointer;
+  }
+  .bd-name-row label input { accent-color: var(--accent); }
   .bad-row-toggle {
     display: flex; align-items: center; gap: 8px;
     font-size: 12px; color: var(--text2); cursor: pointer;
@@ -1772,6 +1793,9 @@ function toHankaku(str) {
   return String(str).replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
 }
 
+// HTML属性値のエスケープ（動的要素のdata-attribute・value埋め込み用）
+const escAttr = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+
 document.addEventListener('input', (e) => {
   const t = e.target;
   if (t.tagName === 'INPUT' && (t.type === 'number' || t.type === 'text')) {
@@ -2358,6 +2382,13 @@ function renderDayPanel(dateStr) {
   list.innerHTML = html;
 }
 
+// 内訳の表示名：name空の細目なし行は「{カテゴリ名}（細目なし）」、カテゴリなしは既存フォールバック維持
+function bdDisplayName(b, fallback = '内訳') {
+  if (b.name) return b.name;
+  const g = settings.bdCatGroups.find(g => g.id === b.bdCatGroupId);
+  return g ? `${g.name}（細目なし）` : fallback;
+}
+
 function buildExpenseCard(e, showActions = true) {
   const noReceiptBadge = e.noReceipt ? `<span style="font-size:10px;color:var(--expense);background:rgba(255,107,107,0.15);border-radius:3px;padding:1px 5px;margin-left:4px;">領収書なし</span>` : '';
   const typeLabel = e.type === 'work' ? '仕事' : e.type === 'other' ? 'その他' : 'プライベート';
@@ -2372,14 +2403,14 @@ function buildExpenseCard(e, showActions = true) {
     breakdownHtml = '<div class="breakdown-display">';
     normalBDs.forEach(b => {
       breakdownHtml += `<div class="breakdown-display-item">
-        <span>${b.name||'内訳'}</span>
+        <span>${bdDisplayName(b)}</span>
         <span>¥${(b.amount||0).toLocaleString()}</span>
       </div>`;
     });
     badBDs.forEach(b => {
       const badge = `<span style="font-size:9px;background:var(--bad);color:#fff;border-radius:3px;padding:1px 4px;margin-left:4px;">👿</span>`;
       breakdownHtml += `<div class="breakdown-display-item bad">
-        <span>${b.name||'内訳'}${badge}${b.badCategory?` <span style="font-size:9px;color:var(--bad);">${b.badCategory}</span>`:''}</span>
+        <span>${bdDisplayName(b)}${badge}${b.badCategory?` <span style="font-size:9px;color:var(--bad);">${b.badCategory}</span>`:''}</span>
         <span style="color:var(--bad);font-weight:700;">¥${(b.amount||0).toLocaleString()}</span>
       </div>`;
     });
@@ -2581,12 +2612,12 @@ function buildExpenseCompact(e) {
     breakdownHtml = '<div class="exp-breakdown">';
     normalBDs.forEach(b => {
       breakdownHtml += `<div class="exp-breakdown-item">
-        <span>${b.name || '内訳'}</span><span>¥${(b.amount||0).toLocaleString()}</span>
+        <span>${bdDisplayName(b)}</span><span>¥${(b.amount||0).toLocaleString()}</span>
       </div>`;
     });
     badBDs.forEach(b => {
       breakdownHtml += `<div class="exp-breakdown-item bad">
-        <span>👿 ${b.name || '内訳'}${b.badCategory ? ` <span style="font-size:9px;">${b.badCategory}</span>` : ''}</span>
+        <span>👿 ${bdDisplayName(b)}${b.badCategory ? ` <span style="font-size:9px;">${b.badCategory}</span>` : ''}</span>
         <span>¥${(b.amount||0).toLocaleString()}</span>
       </div>`;
     });
@@ -3522,7 +3553,7 @@ window.moveFixed = async (i, delta) => {
 function onBdJumpRowClick(e) {
   const row = e.target.closest('.bd-jump-row');
   if (!row) return;
-  openBreakdownJumpModal(row.dataset.bdName, row.dataset.bdCat);
+  openBreakdownJumpModal(row.dataset.bdName, row.dataset.bdCat, row.dataset.bdLabel);
 }
 
 // ===== 集計タブ =====
@@ -3613,13 +3644,14 @@ function renderSummary() {
     (e.breakdowns || []).forEach(b => {
       const catId = b.bdCatGroupId || '__none__';
       const catName = settings.bdCatGroups.find(g => g.id === catId)?.name || 'カテゴリなし';
-      const itemName = b.name || '（名前なし）';
+      // 集計キーは生のname（空=細目なし行も1グループに集約）。表示用ラベルは別持ちにしてジャンプ検索と分離
+      const itemKey = b.name || '';
       if (!bdCatMap[catId]) bdCatMap[catId] = { name: catName, total: 0, items: {} };
       bdCatMap[catId].total += b.amount || 0;
-      if (!bdCatMap[catId].items[itemName]) bdCatMap[catId].items[itemName] = { total: 0, count: 0, hasBad: false };
-      bdCatMap[catId].items[itemName].total += b.amount || 0;
-      bdCatMap[catId].items[itemName].count++;
-      if (b.isBad) bdCatMap[catId].items[itemName].hasBad = true;
+      if (!bdCatMap[catId].items[itemKey]) bdCatMap[catId].items[itemKey] = { label: bdDisplayName(b, '（名前なし）'), total: 0, count: 0, hasBad: false };
+      bdCatMap[catId].items[itemKey].total += b.amount || 0;
+      bdCatMap[catId].items[itemKey].count++;
+      if (b.isBad) bdCatMap[catId].items[itemKey].hasBad = true;
     });
   });
   const bdEl = document.getElementById('breakdownSummary');
@@ -3634,15 +3666,14 @@ function renderSummary() {
     if (entries.length === 0) {
       bdEl.innerHTML = badRow || '<div style="color:var(--text2);font-size:12px;text-align:center;padding:8px;">内訳データなし</div>';
     } else {
-      const escAttr = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
       bdEl.innerHTML = entries.map(([catId, cat], idx) => {
         const totalCount = Object.values(cat.items).reduce((s, v) => s + v.count, 0);
         const itemsHtml = Object.entries(cat.items)
           .sort((a, b) => b[1].total - a[1].total)
           .map(([name, v]) => `
             <div class="stat-row bd-jump-row" style="padding-left:12px;cursor:pointer;"
-              data-bd-name="${escAttr(name)}" data-bd-cat="${escAttr(catId)}">
-              <span class="stat-label" style="font-size:12px;">${v.hasBad ? '👿 ' : ''}${name}（${v.count}件）</span>
+              data-bd-name="${escAttr(name)}" data-bd-cat="${escAttr(catId)}" data-bd-label="${escAttr(v.label)}">
+              <span class="stat-label" style="font-size:12px;">${v.hasBad ? '👿 ' : ''}${v.label}（${v.count}件）</span>
               <span class="stat-value" style="color:${v.hasBad ? 'var(--bad)' : 'var(--expense)'};font-size:12px;">¥${v.total.toLocaleString()}</span>
             </div>
           `).join('');
@@ -3818,19 +3849,16 @@ window.saveExpense = async () => {
 
   const breakdowns = [];
   document.querySelectorAll('#expBreakdownList .breakdown-row').forEach(row => {
-    const nameInput = row.querySelector('input[type=text]');
-    const amtInput = row.querySelector('.bd-amount');
+    const name = row.querySelector('.bd-name-input')?.value.trim() || '';
+    const amt = parseInt(row.querySelector('.bd-amount')?.value) || 0;
     const badCheck = row.querySelector('.bad-check');
     const badSel = row.querySelector('.bad-cat-sel');
-    const itemSel = row.querySelector('.bd-item-sel');
-    const catSel = row.querySelector('.bd-cat-sel');
-    const name = nameInput ? nameInput.value.trim() : '';
-    const amt = amtInput ? parseInt(amtInput.value) || 0 : 0;
     const isBad = badCheck ? badCheck.checked : false;
     const badCategory = (isBad && badSel) ? badSel.value : '';
-    const bdItemId = itemSel ? itemSel.value : '';
-    const bdCatGroupId = catSel ? catSel.value : '';
-    if (name || amt) {
+    const bdItemId = row.querySelector('.bd-item-sel')?.value || '';
+    const bdCatGroupId = row.dataset.cat || '__none__';
+    // カテゴリ選択のみ（name空・金額空）の行も保存可。全項目空の行のみ捨てる
+    if (name || amt || bdCatGroupId !== '__none__') {
       breakdowns.push({ name, amount: amt, isBad, badCategory, bdItemId, bdCatGroupId });
     }
   });
@@ -4016,6 +4044,24 @@ window.saveExpense = async () => {
     shopCheck.checked = false;
   }
 
+  // 細目テンプレ登録（お店・場所方式踏襲：重複はトーストスキップ・onSnapshotで反映）
+  for (const row of document.querySelectorAll('#expBreakdownList .breakdown-row')) {
+    const regCheck = row.querySelector('.bd-item-register');
+    if (!regCheck || !regCheck.checked) continue;
+    const name = row.querySelector('.bd-name-input')?.value.trim() || '';
+    if (!name) continue;
+    const catId = row.dataset.cat || '__none__';
+    const groupId = catId === '__none__' ? null : catId;
+    const dup = settings.bdItems.find(i => i.name === name && (i.groupId || null) === groupId);
+    if (!dup) {
+      await addDoc(collection(db, 'kakeibo_settings'), { _type:'bdItem', name, groupId, order: settings.bdItems.length });
+      showToast(`細目「${name}」をテンプレ登録しました`);
+    } else {
+      showToast(`細目「${name}」はすでに登録済みです`);
+    }
+    regCheck.checked = false;
+  }
+
   closeModal('expenseModal');
   await loadMonthData();
 };
@@ -4096,42 +4142,100 @@ window.onShopRegisterToggle = () => {
 };
 
 function appendBreakdownRow(b = {}) {
+  // 既存データは bdCatGroupId='' の場合があるため「カテゴリなし」='__none__' に寄せる（保存時も'__none__'で統一）
+  let catId = b.bdCatGroupId || '__none__';
+  if (catId !== '__none__' && !settings.bdCatGroups.some(g => g.id === catId)) catId = '__none__';
+  const chips = [...settings.bdCatGroups, { id: '__none__', name: 'カテゴリなし' }]
+    .map(c => `<button type="button" class="bd-chip${c.id === catId ? ' selected' : ''}" data-group="${escAttr(c.id)}">${c.name}</button>`)
+    .join('');
   const row = document.createElement('div');
   row.className = 'breakdown-row';
+  row.dataset.cat = catId;
   row.innerHTML = `
-    <select class="bd-cat-sel" onchange="onBdCatChange(this)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;outline:none;margin-bottom:4px;">
-      <option value="">-- カテゴリを選択 --</option>
-      ${settings.bdCatGroups.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
-      <option value="__none__">カテゴリなし</option>
-    </select>
-    <select class="bd-item-sel" onchange="onBdItemChange(this)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;outline:none;margin-bottom:6px;">
-      <option value="">-- 細目を選択 --</option>
-      ${settings.bdItems.map(i => `<option value="${i.id}" data-name="${i.name}" data-group="${i.groupId||''}">${i.name}</option>`).join('')}
-    </select>
+    <div class="bd-chip-wrap">${chips}</div>
+    <select class="bd-item-sel" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text2);padding:6px 10px;font-size:12px;outline:none;margin-bottom:6px;"></select>
+    <div class="bd-name-row">
+      <input type="text" class="bd-name-input" placeholder="細目名（自由入力可）" value="${escAttr(b.name || '')}">
+      <label><input type="checkbox" class="bd-item-register">テンプレ登録</label>
+    </div>
     <div class="breakdown-row-top">
-      <input type="text" placeholder="項目名" value="${b.name||''}">
-      <input type="text" inputmode="numeric" class="bd-amount" placeholder="金額" value="${b.amount||''}" readonly onclick="openBdCalcModal(this)">
-      <button onclick="window.removeBreakdownRowWithConfirm(this)">×</button>
+      <input type="text" inputmode="numeric" class="bd-amount" placeholder="金額" value="${escAttr(b.amount || '')}" readonly>
+      <button type="button" class="bd-del-btn">×</button>
     </div>
     <label class="bad-row-toggle">
-      <input type="checkbox" class="bad-check" onchange="toggleBadRow(this)" ${b.isBad?'checked':''}>
+      <input type="checkbox" class="bad-check" ${b.isBad?'checked':''}>
       <span>👿 BADとしてマーク</span>
     </label>
     <div class="bad-category-wrap" style="display:${b.isBad?'block':'none'};margin-top:8px;">
       <select class="bad-cat-sel" style="width:100%;background:var(--bg);border:1px solid var(--bad);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;"></select>
     </div>
   `;
-  const textInput = row.querySelector('input[type="text"]');
-  textInput.addEventListener('compositionstart', () => { isComposing = true; });
-  textInput.addEventListener('compositionend', () => { isComposing = false; });
+  populateBdItemSel(row, catId, b.bdItemId || '');
   const badSel = row.querySelector('.bad-cat-sel');
   populateBadCategorySel(badSel);
   if (b.isBad && b.badCategory) badSel.value = b.badCategory;
-  if (b.bdCatGroupId) row.querySelector('.bd-cat-sel').value = b.bdCatGroupId;
-  if (b.bdItemId) row.querySelector('.bd-item-sel').value = b.bdItemId;
   document.getElementById('expBreakdownList').appendChild(row);
   updateBdSumDisplay();
 }
+
+// 選択カテゴリに属する細目のみをプルダウンへ反映（'__none__'は全細目表示）
+function populateBdItemSel(row, groupId, selectedItemId = '') {
+  const sel = row.querySelector('.bd-item-sel');
+  const items = groupId === '__none__'
+    ? settings.bdItems
+    : settings.bdItems.filter(i => i.groupId === groupId);
+  // 編集プリフィルで既存伝票の細目が絞込の外にある場合も選択肢に含める（旧データ互換）
+  const extra = selectedItemId && !items.some(i => i.id === selectedItemId)
+    ? settings.bdItems.filter(i => i.id === selectedItemId) : [];
+  sel.innerHTML = '<option value="">-- 細目を選択 --</option>' +
+    [...items, ...extra].map(i =>
+      `<option value="${escAttr(i.id)}" data-name="${escAttr(i.name)}" data-group="${escAttr(i.groupId || '')}">${i.name}</option>`
+    ).join('');
+  sel.value = selectedItemId || '';
+}
+
+function selectBdChip(chip) {
+  const row = chip.closest('.breakdown-row');
+  const groupId = chip.dataset.group;
+  if (row.dataset.cat === groupId) return;
+  row.dataset.cat = groupId;
+  row.querySelectorAll('.bd-chip').forEach(c => c.classList.toggle('selected', c === chip));
+  // カテゴリ変更時は細目・細目名をリセット（旧onBdCatChange挙動の踏襲）
+  populateBdItemSel(row, groupId);
+  row.querySelector('.bd-name-input').value = '';
+}
+
+function onBdItemSelChange(sel) {
+  const row = sel.closest('.breakdown-row');
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) return;
+  row.querySelector('.bd-name-input').value = opt.dataset.name || '';
+  // 「カテゴリなし」表示中に全細目から選んだ場合は親カテゴリのチップへ自動同期
+  const groupId = opt.dataset.group || '';
+  if (groupId && row.dataset.cat !== groupId) {
+    const chip = row.querySelector(`.bd-chip[data-group="${groupId}"]`);
+    if (chip) {
+      row.dataset.cat = groupId;
+      row.querySelectorAll('.bd-chip').forEach(c => c.classList.toggle('selected', c === chip));
+      populateBdItemSel(row, groupId, opt.value);
+    }
+  }
+}
+
+// 内訳行は動的生成のためイベント委譲で処理（onclick属性は使わない）
+const _bdListEl = document.getElementById('expBreakdownList');
+_bdListEl.addEventListener('click', (e) => {
+  const chip = e.target.closest('.bd-chip');
+  if (chip) { selectBdChip(chip); return; }
+  const del = e.target.closest('.bd-del-btn');
+  if (del) { removeBreakdownRowWithConfirm(del); return; }
+  const amt = e.target.closest('.bd-amount');
+  if (amt) openBdCalcModal(amt);
+});
+_bdListEl.addEventListener('change', (e) => {
+  if (e.target.classList.contains('bd-item-sel')) onBdItemSelChange(e.target);
+  else if (e.target.classList.contains('bad-check')) toggleBadRow(e.target);
+});
 
 window.addBreakdownRow = () => {
   const total = calcGetValue('exp');
@@ -4140,42 +4244,6 @@ window.addBreakdownRow = () => {
   existing.forEach(inp => { const v = parseInt(inp.value); if (!isNaN(v)) sum += v; });
   const remainder = total - sum;
   appendBreakdownRow(remainder > 0 ? { amount: remainder } : {});
-};
-
-window.onBdCatChange = (catSel) => {
-  const groupId = catSel.value;
-  const row = catSel.closest('.breakdown-row');
-  const itemSel = row.querySelector('.bd-item-sel');
-  Array.from(itemSel.options).forEach(opt => {
-    if (!opt.value) return;
-    if (groupId === '' || groupId === '__none__') {
-      opt.style.display = '';
-    } else {
-      opt.style.display = (opt.dataset.group === groupId) ? '' : 'none';
-    }
-  });
-  itemSel.value = '';
-  const nameInput = row.querySelector('input[type=text]');
-  if (nameInput) nameInput.value = '';
-};
-
-window.onBdItemChange = (itemSel) => {
-  const opt = itemSel.options[itemSel.selectedIndex];
-  if (!opt || !opt.value) return;
-  const row = itemSel.closest('.breakdown-row');
-  const nameInput = row.querySelector('input[type=text]');
-  if (nameInput) nameInput.value = opt.dataset.name || '';
-  // 細目が属する親カテゴリを自動選択。
-  // onBdCatChange は細目選択・項目名をリセットするため呼ばず、表示フィルタのみ同期する
-  const groupId = opt.dataset.group || '';
-  const catSel = row.querySelector('.bd-cat-sel');
-  if (groupId && catSel && catSel.value !== groupId) {
-    catSel.value = groupId;
-    Array.from(itemSel.options).forEach(o => {
-      if (!o.value) return;
-      o.style.display = (o.dataset.group === groupId) ? '' : 'none';
-    });
-  }
 };
 
 window.toggleBadRow = (checkbox) => {
@@ -5345,11 +5413,11 @@ function clearHighlight() {
   if (document.getElementById('tab-expenses').classList.contains('active')) renderExpenseTab();
 }
 
-window.openBreakdownJumpModal = (itemName, catId) => {
+window.openBreakdownJumpModal = (itemName, catId, label = '') => {
   const matched = expenses
     .map(e => {
       const b = (e.breakdowns || []).find(b =>
-        b.name === itemName && (b.bdCatGroupId || '__none__') === catId
+        (b.name || '') === itemName && (b.bdCatGroupId || '__none__') === catId
       );
       return b ? { e, b } : null;
     })
@@ -5362,7 +5430,7 @@ window.openBreakdownJumpModal = (itemName, catId) => {
     setTimeout(() => selectDate(matched[0].e.date), 100);
     return;
   }
-  document.getElementById('bdJumpModalTitle').textContent = `${itemName}（${matched.length}件）`;
+  document.getElementById('bdJumpModalTitle').textContent = `${label || itemName}（${matched.length}件）`;
   const listEl = document.getElementById('bdJumpList');
   listEl.innerHTML = '';
   matched.forEach(({ e, b }) => {
