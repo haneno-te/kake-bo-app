@@ -2394,6 +2394,7 @@ function bdDisplayName(b, fallback = '内訳') {
 
 function buildExpenseCard(e, showActions = true) {
   const noReceiptBadge = e.noReceipt ? `<span style="font-size:10px;color:var(--expense);background:rgba(255,107,107,0.15);border-radius:3px;padding:1px 5px;margin-left:4px;">領収書なし</span>` : '';
+  const irregularBadge = e.irregular ? `<span style="font-size:10px;color:var(--text2);border:1px solid var(--text2);background:none;border-radius:3px;padding:0 5px;margin-left:4px;">イレギュラー</span>` : '';
   const typeLabel = e.type === 'work' ? '仕事' : e.type === 'other' ? 'その他' : 'プライベート';
   const payLabel = e.payMethod === 'card' ? (settings.cards.find(c => c.id === e.cardId)?.name || 'カード') :
                    e.payMethod === 'transfer' ? (settings.accounts.find(a => a.id === e.accountId)?.name || '口座振込') : '現金';
@@ -2431,7 +2432,7 @@ function buildExpenseCard(e, showActions = true) {
     <div class="record-top">
       <div class="record-left">
         <div class="record-category">${typeLabel}</div>
-        <div class="record-memo">${isWork ? WORK_ICON + ' ' : ''}${e.shop || e.memo || '（メモなし）'}</div>
+        <div class="record-memo">${isWork ? WORK_ICON + ' ' : ''}${e.shop || e.memo || '（メモなし）'}${irregularBadge}</div>
         ${(e.shop && e.memo) ? `<div class="record-sub">${e.memo}${noReceiptBadge}</div>` : (noReceiptBadge ? `<div class="record-sub">${noReceiptBadge}</div>` : '')}
         <div><span class="pay-badge ${payBadgeClass}">${payLabel}</span></div>
         ${breakdownHtml}
