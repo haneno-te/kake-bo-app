@@ -1884,12 +1884,13 @@ window.toggleAccordion = (header) => {
 };
 
 // カードタブ内のセクション（未払いプール／引き落とし確定済み）開閉。永続化なしの最小実装
-window.toggleCardSection = (header) => {
+window.toggleCardSection = (header, lsKey) => {
   const body = header.nextElementSibling;
   const isOpen = body.style.display !== 'none';
   body.style.display = isOpen ? 'none' : 'block';
   const arrow = header.querySelector('.card-section-arrow');
   if (arrow) arrow.textContent = isOpen ? '▶' : '▼';
+  if (lsKey) localStorage.setItem(lsKey, String(!isOpen));
 };
 
 window.toggleUnpaidDetail = (id) => {
@@ -2817,6 +2818,10 @@ function renderCardTab() {
   }
 
   const ym = currentYM();
+  // セクション開閉はlocalStorageで永続化（設定タブと同方式）。キー未設定時は現状の見た目を維持。
+  // 全カード共通の状態（キーはカード非依存＝仕様の命名に準拠）
+  const cardUnpaidOpen = localStorage.getItem('secOpen_cardUnpaid') !== 'false';    // 既定：開
+  const cardConfirmedOpen = localStorage.getItem('secOpen_cardConfirmed') === 'true'; // 既定：閉
   const allConfirmed = [
     ...cardConfirmed,
     ...cardPools.filter(c => c.confirmedMonth).map(c => ({
@@ -2948,10 +2953,10 @@ function renderCardTab() {
       </div>
       <div class="accordion-body" style="display:none;">
         ${summarySectionHtml}
-        <div class="sec-head" onclick="toggleCardSection(this)">未払いプール <span class="card-section-arrow" style="font-size:10px;">▼</span></div>
-        <div class="card-section-body">${poolHtml}</div>
-        <div class="sec-head" onclick="toggleCardSection(this)">引き落とし確定済み <span class="card-section-arrow" style="font-size:10px;">▶</span></div>
-        <div class="card-section-body" style="display:none;">${confirmedHtml}</div>
+        <div class="sec-head" onclick="toggleCardSection(this,'secOpen_cardUnpaid')">未払いプール <span class="card-section-arrow" style="font-size:10px;">${cardUnpaidOpen ? '▼' : '▶'}</span></div>
+        <div class="card-section-body"${cardUnpaidOpen ? '' : ' style="display:none;"'}>${poolHtml}</div>
+        <div class="sec-head" onclick="toggleCardSection(this,'secOpen_cardConfirmed')">引き落とし確定済み <span class="card-section-arrow" style="font-size:10px;">${cardConfirmedOpen ? '▼' : '▶'}</span></div>
+        <div class="card-section-body"${cardConfirmedOpen ? '' : ' style="display:none;"'}>${confirmedHtml}</div>
       </div>
     </div>`;
   }).join('');
@@ -3321,13 +3326,17 @@ function renderFixedTab() {
     ? '<div style="font-size:12px;color:var(--text2);padding:8px 4px;">マスター項目がありません（＋追加から登録）</div>'
     : (unregRows.length ? unregRows.join('') : '<div style="font-size:12px;color:var(--income);padding:8px 4px;">今月分はすべて登録済み ✅</div>');
 
+  // セクション開閉はlocalStorageで永続化（設定タブと同方式）。キー未設定時は現状の見た目を維持
+  const unregOpen = localStorage.getItem('secOpen_fixedUnreg') !== 'false';     // 既定：開
+  const masterOpen = localStorage.getItem('secOpen_fixedMaster') === 'true';    // 既定：閉
+  const actualOpen = localStorage.getItem('secOpen_fixedActual') !== 'false';   // 既定：開
   list.innerHTML = `
-    <div class="sec-head" onclick="toggleCardSection(this)">今月未登録 <span class="card-section-arrow" style="font-size:10px;">▼</span></div>
-    <div class="card-section-body">${unregBody}</div>
-    <div class="sec-head" onclick="toggleCardSection(this)">マスター一覧 <span class="card-section-arrow" style="font-size:10px;">▶</span></div>
-    <div class="card-section-body" style="display:none;">${masterRows.length ? masterRows.join('') : '<div class="loading">データなし</div>'}</div>
-    <div class="sec-head" onclick="toggleCardSection(this)">今月の登録実績 <span class="card-section-arrow" style="font-size:10px;">▼</span></div>
-    <div class="card-section-body">${actualRows.length ? actualRows.join('') : '<div style="font-size:12px;color:var(--text2);padding:8px 4px;">今月の登録実績なし</div>'}</div>`;
+    <div class="sec-head" onclick="toggleCardSection(this,'secOpen_fixedUnreg')">今月未登録 <span class="card-section-arrow" style="font-size:10px;">${unregOpen ? '▼' : '▶'}</span></div>
+    <div class="card-section-body"${unregOpen ? '' : ' style="display:none;"'}>${unregBody}</div>
+    <div class="sec-head" onclick="toggleCardSection(this,'secOpen_fixedMaster')">マスター一覧 <span class="card-section-arrow" style="font-size:10px;">${masterOpen ? '▼' : '▶'}</span></div>
+    <div class="card-section-body"${masterOpen ? '' : ' style="display:none;"'}>${masterRows.length ? masterRows.join('') : '<div class="loading">データなし</div>'}</div>
+    <div class="sec-head" onclick="toggleCardSection(this,'secOpen_fixedActual')">今月の登録実績 <span class="card-section-arrow" style="font-size:10px;">${actualOpen ? '▼' : '▶'}</span></div>
+    <div class="card-section-body"${actualOpen ? '' : ' style="display:none;"'}>${actualRows.length ? actualRows.join('') : '<div style="font-size:12px;color:var(--text2);padding:8px 4px;">今月の登録実績なし</div>'}</div>`;
 }
 
 // 登録実績の行タップ→実データ側へ誘導（イベント委譲・表示専用の窓）
