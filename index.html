@@ -3240,7 +3240,8 @@ function renderFixedTab() {
       f.payMethod === 'transfer' ? `口座振込${f.payAccountId ? '（' + (settings.accounts.find(a => a.id === f.payAccountId)?.name || '') + '）' : ''}` : '';
     const payInfo = [payDayLabel, payMethodLabel].filter(Boolean).join(' / ');
 
-    // 登録経路3分岐: カード（非デビット）→プール投入／カード（デビット）→支出モーダル即時経路／振込・現金→支出モーダル
+    // 登録済み判定: カード（非デビット）はプール（fixedCostId+month===ym）／それ以外はexpensesで判定。
+    // 入口は全支払方法とも支出モーダル（openFixedExpenseModal→saveExpense）に統一
     const payCard = f.payMethod === 'card' ? settings.cards.find(c => c.id === f.payCardId) : null;
     const isDebitFix = !!(payCard?.isDebit && payCard?.debitAccountId);
     let isRegistered = false;
@@ -3249,9 +3250,7 @@ function renderFixedTab() {
     } else if (f.payMethod) {
       isRegistered = expenses.some(e => e.fixedCostId === f.id && !isFixedFeeRecord(e) && e.date >= ymStart && e.date < nextM);
     }
-    const registerBtn = f.payMethod === 'card' && !isDebitFix
-      ? `<button class="btn-sm accent" onclick="openFixedPayModal('${f.id}')" style="flex-shrink:0;">📥 今月分を登録</button>`
-      : f.payMethod
+    const registerBtn = f.payMethod
       ? `<button class="btn-sm accent" onclick="openFixedExpenseModal('${f.id}')" style="flex-shrink:0;">📝 支払いを記録</button>`
       : '';
     const registeredLabel = `<label style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--income);flex-shrink:0;cursor:pointer;">
@@ -3291,8 +3290,12 @@ function renderFixedTab() {
   // 今月の登録実績（表示専用の窓。編集・削除は支出タブ／カードタブの既存経路で行う）
   const nameOf = (fid, fallback) => fixedCosts.find(x => x.id === fid)?.name || fallback || '（不明）';
   const actualRows = [];
+  // カード（非デビット）はcard_pools由来で表示するためexpensesからは除外（D2・二重表示防止）。
+  // 振込・現金・デビットはexpenses由来で表示
+  const isNonDebitCardExp = (e) => e.payMethod === 'card' &&
+    !settings.cards.find(c => c.id === e.cardId)?.isDebit;
   expenses
-    .filter(e => e.fixedCostId && !isFixedFeeRecord(e))
+    .filter(e => e.fixedCostId && !isFixedFeeRecord(e) && !isNonDebitCardExp(e))
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
     .forEach(e => {
       const badgeCls = e.payMethod === 'card' ? 'card' : e.payMethod === 'transfer' ? 'transfer' : 'cash';
@@ -3364,16 +3367,21 @@ window.unregisterFixed = (id, checkbox) => {
       getDocs(collection(db, 'account_txs')),
     ]);
     const batch = writeBatch(db);
+    const poolExpIds = new Set();
     cpSnap.forEach(d => {
       const r = d.data();
       if (r.fixedCostId !== id || r.confirmedMonth) return;
-      if ((r.month === ym) || (!r.month && r.date && r.date.startsWith(ym))) batch.delete(doc(db, 'card_pools', d.id));
+      if ((r.month === ym) || (!r.month && r.date && r.date.startsWith(ym))) {
+        batch.delete(doc(db, 'card_pools', d.id));
+        if (r.expenseId) poolExpIds.add(r.expenseId); // 新形式カード定期: 対の支出を決済日の月に依らず連動削除
+      }
     });
     const delExpIds = new Set();
     expSnap.forEach(d => {
       const r = d.data();
       if (r.fixedCostId !== id) return;
-      if (r.date && r.date.startsWith(ym)) { delExpIds.add(d.id); batch.delete(doc(db, 'expenses', d.id)); }
+      // 日付が当月のもの（振込・現金・デビット・旧来）に加え、削除プールに紐づく支出（カード新形式・決済日が別月でも）
+      if ((r.date && r.date.startsWith(ym)) || poolExpIds.has(d.id)) { delExpIds.add(d.id); batch.delete(doc(db, 'expenses', d.id)); }
     });
     txSnap.forEach(d => {
       const r = d.data();
@@ -3392,16 +3400,11 @@ window.unregisterFixed = (id, checkbox) => {
 window.openFixedExpenseModal = (fixedCostId) => {
   const f = fixedCosts.find(x => x.id === fixedCostId);
   if (!f) return;
-  const payCard = f.payMethod === 'card' ? settings.cards.find(c => c.id === f.payCardId) : null;
-  const isDebitFix = !!(payCard?.isDebit && payCard?.debitAccountId);
-  if (f.payMethod === 'card' && !isDebitFix) {
-    alert('この定期項目はカード（プール）払いです。「📥 今月分を登録」から登録してください。');
-    return;
-  }
   if (!f.payMethod) {
     alert('支払い方法を設定してください');
     return;
   }
+  // カード（非デビット）も通常カード支出と同一のsaveExpense経路に合流（プールはfixedCostId+month付きで生成）
   openExpenseModal(null);
   // 前月の同固定費の金額をプレロード（該当なしは空欄）。保存は既存saveExpenseの経路
   calcSet('exp', _prevFixedAmounts[f.id]?.amount || '');
@@ -4032,7 +4035,11 @@ window.saveExpense = async () => {
       if (card?.isDebit && card?.debitAccountId) {
         await addDoc(collection(db, 'account_txs'), { accountId: card.debitAccountId, txType: 'transfer_out', amount, date, memo: _debitMemo, debitExpenseId: expId });
       } else {
-        const poolDocRef = await addDoc(collection(db, 'card_pools'), { amount, date, cardId: data.cardId, memo: _expMemo, installType: 'once', expenseId: expId });
+        const poolDocRef = await addDoc(collection(db, 'card_pools'), {
+          amount, date, cardId: data.cardId, memo: _expMemo, installType: 'once', expenseId: expId,
+          // 定期経由（fixedCostId有り）は登録済み判定・登録実績表示のためmonth=対象月を明示（決済日月ではない）
+          ...(data.fixedCostId ? { fixedCostId: data.fixedCostId, month: currentYM() } : {})
+        });
         await updateDoc(doc(db, 'expenses', expId), { cardPoolId: poolDocRef.id });
         showToast('カードプールにも追加しました');
       }
