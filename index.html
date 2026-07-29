@@ -3914,16 +3914,37 @@ function renderSummary() {
 }
 
 // ===== 支出CRUD =====
+// カード相互リンクの双方向探索で編集・削除の可否を判定（3入口＝openExpenseModal / saveExpense編集 / deleteExpense 共通）
+// 戻り値: 'blocked'（プール特定でき引落済み）/ 'orphan'（cardPoolId保持だが双方向探索でプール不明＝リンク切れ）/ 'ok'
+function cardEditGuardState(exp) {
+  if (!exp) return 'ok';
+  const pool = cardPools.find(p => p.expenseId === exp.id)
+    || (exp.cardPoolId ? cardPools.find(p => p.id === exp.cardPoolId) : null);
+  if (pool) {
+    if (pool.confirmedMonth &&
+        accountTxs.some(t => t.cardPayoutKey === `${pool.cardId}_${pool.confirmedMonth}`)) {
+      return 'blocked';
+    }
+    return 'ok';
+  }
+  return exp.cardPoolId ? 'orphan' : 'ok';
+}
+const CARD_GUARD_BLOCK_MSG = '口座からの引き落としが完了しているため変更できません。カードタブで振替済みを解除してから操作してください。';
+const CARD_GUARD_ORPHAN_MSG = 'このデータはカード側との対応づけが確認できません。このまま操作するとカード側にデータが残る可能性があります。続行しますか？';
+let _cardGuardBypassId = null;   // openExpenseModal: orphan確認後の再入で自ガードを1回だけ通す
+let _cardOrphanOverride = false; // saveExpense: orphan確認後の再入で自ガードを1回だけ通す
+
 window.openExpenseModal = (id = null, date = null) => {
-  // ✅済み月の確定プールに紐づく支出は編集入口でガード（saveExpense側の保存時ガードは多重防御として存置）
-  if (id) {
-    const lockedPool = cardPools.find(p => p.expenseId === id && p.confirmedMonth &&
-      accountTxs.some(t => t.cardPayoutKey === `${p.cardId}_${p.confirmedMonth}`));
-    if (lockedPool) {
-      alert('この支出のカード引落は✅（振替完了）済みです。編集するには先にカードタブで✅を解除してください。');
+  // カード相互リンクの双方向ガード（編集入口。saveExpense側の保存時ガードは多重防御として存置）
+  if (id && _cardGuardBypassId !== id) {
+    const g = cardEditGuardState(expenses.find(x => x.id === id));
+    if (g === 'blocked') { alert(CARD_GUARD_BLOCK_MSG); return; }
+    if (g === 'orphan') {
+      showConfirm(CARD_GUARD_ORPHAN_MSG, () => { _cardGuardBypassId = id; openExpenseModal(id, date); }, '続行', 'キャンセル', true);
       return;
     }
   }
+  _cardGuardBypassId = null; // 消費
   editingExpenseId = id;
   document.getElementById('expenseModalTitle').textContent = id ? '支出を編集' : '支出を追加';
   if (id) {
@@ -4034,13 +4055,14 @@ window.saveExpense = async () => {
   const _debitMemo = memo || shop || '（デビット決済）';
 
   if (editingExpenseId) {
-    // ✅済み月の確定額に紐づく支出の編集は裏口も含めてガード（④）
-    const lockedPool = cardPools.find(p => p.expenseId === editingExpenseId && p.confirmedMonth &&
-      accountTxs.some(t => t.cardPayoutKey === `${p.cardId}_${p.confirmedMonth}`));
-    if (lockedPool) {
-      alert('この支出のカード引落は✅（振替完了）済みです。編集するには先にカードタブで✅を解除してください。');
+    // カード相互リンクの双方向ガード（保存時。裏口も含めた多重防御）
+    const _g = cardEditGuardState(expenses.find(x => x.id === editingExpenseId));
+    if (_g === 'blocked') { alert(CARD_GUARD_BLOCK_MSG); return; }
+    if (_g === 'orphan' && !_cardOrphanOverride) {
+      showConfirm(CARD_GUARD_ORPHAN_MSG, () => { _cardOrphanOverride = true; saveExpense(); }, '続行', 'キャンセル', true);
       return;
     }
+    _cardOrphanOverride = false; // 消費
     await updateDoc(doc(db, 'expenses', editingExpenseId), data);
 
     const oldExp = expenses.find(x => x.id === editingExpenseId);
@@ -4218,13 +4240,9 @@ window.saveExpense = async () => {
 
 window.deleteExpense = (id) => {
   const expense = expenses.find(x => x.id === id);
-  // ✅済み月の確定額に紐づく支出の削除もガード（④）
-  const lockedPool = cardPools.find(p => p.expenseId === id && p.confirmedMonth &&
-    accountTxs.some(t => t.cardPayoutKey === `${p.cardId}_${p.confirmedMonth}`));
-  if (lockedPool) {
-    alert('この支出のカード引落は✅（振替完了）済みです。削除するには先にカードタブで✅を解除してください。');
-    return;
-  }
+  // カード相互リンクの双方向ガード
+  const _g = cardEditGuardState(expense);
+  if (_g === 'blocked') { alert(CARD_GUARD_BLOCK_MSG); return; }
   let msg = 'この支出記録を削除しますか？';
   if (expense?.payMethod === 'card' && expense.cardId) {
     const card = settings.cards.find(c => c.id === expense.cardId);
@@ -4236,7 +4254,7 @@ window.deleteExpense = (id) => {
       }
     }
   }
-  showConfirm(msg, async () => {
+  const doDelete = async () => {
     await deleteDoc(doc(db, 'expenses', id));
     if (expense && expense.payMethod === 'card' && expense.cardId) {
       const card = settings.cards.find(c => c.id === expense.cardId);
@@ -4277,7 +4295,13 @@ window.deleteExpense = (id) => {
       for (const ft of feeTxs) await deleteDoc(doc(db, 'account_txs', ft.id));
     }
     await loadMonthData();
-  });
+  };
+  // orphan は続行確認（デフォルトフォーカス＝キャンセル）。ok は従来の削除確認をそのまま維持
+  if (_g === 'orphan') {
+    showConfirm(CARD_GUARD_ORPHAN_MSG, doDelete, '続行', 'キャンセル', true);
+    return;
+  }
+  showConfirm(msg, doDelete);
 };
 
 window.onExpShopSelectChange = () => {
