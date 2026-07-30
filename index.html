@@ -3657,7 +3657,7 @@ window.deleteFixed = (id) => {
     alert('この定期項目の確定分は✅（振替完了）済みの月に含まれています。削除するには先にカードタブで✅を解除してください。');
     return;
   }
-  showConfirm('この定期項目を削除しますか？登録済みの当月以前の支払い記録もすべて削除されます。', async () => {
+  showConfirm('この定期項目を削除しますか？\n\n過去・将来を含むすべての月の支払い記録が削除されます。\n（支出・カードの記録・口座の記録）\n\nこの操作は取り消せません。', async () => {
     const [cpSnap, expSnap, txSnap] = await Promise.all([
       getDocs(collection(db, 'card_pools')),
       getDocs(collection(db, 'expenses')),
