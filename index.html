@@ -491,7 +491,7 @@
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 14px; padding: 20px; width: 280px; text-align: center;
   }
-  .confirm-msg { font-size: 14px; margin-bottom: 16px; line-height: 1.5; }
+  .confirm-msg { font-size: 14px; margin-bottom: 16px; line-height: 1.5; white-space: pre-line; }
   .confirm-btns { display: flex; gap: 8px; }
   .confirm-btns button {
     flex: 1; padding: 10px; border-radius: 8px; border: none;
@@ -3327,7 +3327,9 @@ window.onCardConfirmedUncheck = (itemId, checkbox) => {
       await loadMonthData();
       showToast('プールに戻しました');
     },
-    'プールに戻す'
+    'プールに戻す',
+    'キャンセル',
+    true
   );
 };
 
@@ -3505,7 +3507,7 @@ window.unregisterFixed = (id, checkbox) => {
     });
     await batch.commit();
     await loadMonthData();
-  }, '取り消す');
+  }, '取り消す', 'キャンセル', true);
 };
 
 window.openFixedExpenseModal = (fixedCostId) => {
@@ -3681,7 +3683,7 @@ window.deleteFixed = (id) => {
     batch.delete(doc(db, 'fixed_costs', id));
     await batch.commit();
     await loadMonthData();
-  });
+  }, '削除', 'キャンセル', true);
 };
 
 window.moveFixed = async (i, delta) => {
@@ -4302,7 +4304,7 @@ window.deleteExpense = (id) => {
     showConfirm(CARD_GUARD_ORPHAN_MSG + 'このまま削除しますか？', doDelete, '続行', 'キャンセル', true);
     return;
   }
-  showConfirm(msg, doDelete);
+  showConfirm(msg, doDelete, '削除', 'キャンセル', true);
 };
 
 window.onExpShopSelectChange = () => {
@@ -4581,7 +4583,7 @@ window.deleteIncome = (id) => {
       }
     }
     await loadMonthData();
-  });
+  }, '削除', 'キャンセル', true);
 };
 
 window.toggleIncomeIncludeInPrev = async (id, checked) => {
@@ -4792,7 +4794,7 @@ window.deleteAccountTx = (id) => {
     }
     await deleteDoc(doc(db, 'account_txs', id));
     await loadMonthData();
-  });
+  }, '削除', 'キャンセル', true);
 };
 
 window.openAdjustModal = (accountId, calcBal) => {
@@ -5114,7 +5116,7 @@ window.addBdItem = async () => {
 window.deleteSettingItem = (id, type) => {
   showConfirm('この項目を削除しますか？', async () => {
     await deleteDoc(doc(db, 'kakeibo_settings', id));
-  });
+  }, '削除', 'キャンセル', true);
 };
 
 // 設定項目編集
@@ -5519,7 +5521,9 @@ window.deleteHealthCheckOne = (col, id) => {
         showToast('削除に失敗しました');
       }
     },
-    '削除'
+    '削除',
+    'キャンセル',
+    true
   );
 };
 
@@ -5543,7 +5547,9 @@ window.deleteHealthCheckIssues = () => {
       await loadMonthData();
       runHealthCheck();
     },
-    '削除'
+    '削除',
+    'キャンセル',
+    true
   );
 };
 
@@ -5848,7 +5854,7 @@ document.addEventListener('click', (e) => {
 // 内訳行の削除確認
 window.removeBreakdownRowWithConfirm = (btn) => {
   const row = btn.closest('.breakdown-row');
-  showConfirm('この内訳を削除しますか？', () => { row.remove(); updateBdSumDisplay(); });
+  showConfirm('この内訳を削除しますか？', () => { row.remove(); updateBdSumDisplay(); }, '削除', 'キャンセル', true);
 };
 
 // ===== トースト =====
