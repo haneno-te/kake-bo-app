@@ -1081,14 +1081,15 @@
 
   <div class="accordion-section">
     <div class="accordion-header" onclick="toggleAccordion(this)">
-      <span>🔍 データ健康診断</span><span class="accordion-arrow">▼</span>
+      <span>🔍 データ紐付け点検</span><span class="accordion-arrow">▼</span>
     </div>
     <div class="accordion-body" style="display:none;">
       <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
-        孤立データ・乖離データを検出します。削除は行いません。<br>
-        結果はこのボタンの下に表示されます。
+        レコード同士の紐付けが切れていないかを点検します。<br>
+        点検だけでは何も削除されません。<br>
+        問題が見つかった場合のみ、削除ボタンが表示されます。
       </div>
-      <button class="btn-primary" onclick="runHealthCheck()">🔍 診断を実行</button>
+      <button class="btn-primary" onclick="runHealthCheck()">🔍 点検を実行</button>
       <div id="healthCheckResult" style="margin-top:14px;"></div>
       <div id="healthDeleteWrap" style="margin-top:14px;display:none;">
         <button class="btn-primary" style="background:var(--expense);"
@@ -3269,7 +3270,7 @@ async function onCardPayoutTap(cardId, ym) {
 
   if (existing) {
     // ✅解除 = 出金削除（デフォルトフォーカスは必ずキャンセル）
-    showConfirm('振替記録を削除しますか？', async () => {
+    showConfirm('振替済みを解除しますか？\n口座の引き落とし記録が取り消されます。', async () => {
       await deleteDoc(doc(db, 'account_txs', existing.id));
       await loadMonthData();
       showToast('振替記録を削除しました');
@@ -3469,7 +3470,7 @@ document.getElementById('fixedList').addEventListener('click', (e) => {
 
 window.unregisterFixed = (id, checkbox) => {
   checkbox.checked = true; // 確認が完了するまでチェック状態を維持
-  showConfirm('今月分の登録を取り消しますか？子データも削除されます。', async () => {
+  showConfirm('今月分の登録を取り消しますか？\n支出やカードタブの記録も一緒に削除されます。', async () => {
     const ym = currentYM();
     const [cpSnap, expSnap, txSnap] = await Promise.all([
       getDocs(collection(db, 'card_pools')),
@@ -3930,7 +3931,7 @@ function cardEditGuardState(exp) {
   return exp.cardPoolId ? 'orphan' : 'ok';
 }
 const CARD_GUARD_BLOCK_MSG = '口座からの引き落としが完了しているため変更できません。カードタブで振替済みを解除してから操作してください。';
-const CARD_GUARD_ORPHAN_MSG = 'このデータはカード側との対応づけが確認できません。このまま操作するとカード側にデータが残る可能性があります。続行しますか？';
+const CARD_GUARD_ORPHAN_MSG = 'このデータはカード側との対応づけが確認できません。このまま操作するとカード側にデータが残る可能性があります。';
 let _cardGuardBypassId = null;   // openExpenseModal: orphan確認後の再入で自ガードを1回だけ通す
 let _cardOrphanOverride = false; // saveExpense: orphan確認後の再入で自ガードを1回だけ通す
 
@@ -3940,7 +3941,7 @@ window.openExpenseModal = (id = null, date = null) => {
     const g = cardEditGuardState(expenses.find(x => x.id === id));
     if (g === 'blocked') { alert(CARD_GUARD_BLOCK_MSG); return; }
     if (g === 'orphan') {
-      showConfirm(CARD_GUARD_ORPHAN_MSG, () => { _cardGuardBypassId = id; openExpenseModal(id, date); }, '続行', 'キャンセル', true);
+      showConfirm(CARD_GUARD_ORPHAN_MSG + 'このまま開いて内容を確認しますか？', () => { _cardGuardBypassId = id; openExpenseModal(id, date); }, '続行', 'キャンセル', true);
       return;
     }
   }
@@ -4059,7 +4060,7 @@ window.saveExpense = async () => {
     const _g = cardEditGuardState(expenses.find(x => x.id === editingExpenseId));
     if (_g === 'blocked') { alert(CARD_GUARD_BLOCK_MSG); return; }
     if (_g === 'orphan' && !_cardOrphanOverride) {
-      showConfirm(CARD_GUARD_ORPHAN_MSG, () => { _cardOrphanOverride = true; saveExpense(); }, '続行', 'キャンセル', true);
+      showConfirm(CARD_GUARD_ORPHAN_MSG + 'このまま保存しますか？', () => { _cardOrphanOverride = true; saveExpense(); }, '続行', 'キャンセル', true);
       return;
     }
     _cardOrphanOverride = false; // 消費
@@ -4250,7 +4251,7 @@ window.deleteExpense = (id) => {
       const linkedPools = cardPools.filter(p => p.expenseId === id);
       const hasConfirmed = linkedPools.some(p => p.confirmedMonth);
       if (hasConfirmed) {
-        msg = 'この支出記録には引き落とし確定済みのカード払い情報が紐付いています。\n削除すると、カードタブの確定済みプールも一緒に削除されます。\n本当に削除しますか？';
+        msg = 'この支出には請求月が確定したカード払いの記録が紐付いています。\n削除すると、カードタブの確定済みの記録も一緒に削除されます。\n本当に削除しますか？';
       }
     }
   }
@@ -4298,7 +4299,7 @@ window.deleteExpense = (id) => {
   };
   // orphan は続行確認（デフォルトフォーカス＝キャンセル）。ok は従来の削除確認をそのまま維持
   if (_g === 'orphan') {
-    showConfirm(CARD_GUARD_ORPHAN_MSG, doDelete, '続行', 'キャンセル', true);
+    showConfirm(CARD_GUARD_ORPHAN_MSG + 'このまま削除しますか？', doDelete, '続行', 'キャンセル', true);
     return;
   }
   showConfirm(msg, doDelete);
@@ -5217,6 +5218,7 @@ window.saveDeleteConfirmDefault = (val) => {
 };
 
 let _healthCheckIssues = [];
+let _healthCheckDocs = null; // 個別削除ポップの表示（日付・名称・金額）用の参照。削除対象の特定には使わない
 
 window.runHealthCheck = async () => {
   const resultEl = document.getElementById('healthCheckResult');
@@ -5237,6 +5239,7 @@ window.runHealthCheck = async () => {
   const cpMap  = new Map(); cpSnap.forEach(d =>  cpMap.set(d.id, { id: d.id, ...d.data() }));
   const ccMap  = new Map(); ccSnap.forEach(d =>  ccMap.set(d.id, { id: d.id, ...d.data() }));
   const txMap  = new Map(); txSnap.forEach(d =>  txMap.set(d.id, { id: d.id, ...d.data() }));
+  _healthCheckDocs = { expenses: expMap, income: incMap, fixed_costs: fcMap, card_pools: cpMap, card_confirmed: ccMap, account_txs: txMap };
 
   // A1: card_pools の孤立検査（expenseId/fixedCostId 欠落 or 参照切れ）
   // ID紐付けなしはレガシーデータ（分割等）の可能性があるため参考警告のみ（一括削除対象外）
@@ -5394,7 +5397,9 @@ window.runHealthCheck = async () => {
   };
 
   const summaryColor = totalIssues === 0 ? 'var(--good,#4caf50)' : 'var(--bad)';
-  const summaryText = totalIssues === 0 ? '✅ データは健全です' : `⚠️ ${totalIssues}件の確認すべきデータがあります`;
+  const summaryText = totalIssues === 0
+    ? '紐付けの点検16項目で、問題は見つかりませんでした。<div style="font-size:11px;color:var(--text2);font-weight:normal;margin-top:4px;">※この点検は紐付けの切れのみを調べています。<br>　金額の正しさ・二重計上は点検していません。</div>'
+    : `⚠️ ${totalIssues}件の確認すべきデータがあります`;
 
   const expFields = [{ label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }];
   const cpFields  = [{ label: 'id', key: 'id' }, { label: 'date', key: 'date' }, { label: 'amount', key: 'amount' }, { label: 'memo', key: 'memo' }, { label: 'cardId', key: 'cardId' }];
@@ -5425,7 +5430,31 @@ window.runHealthCheck = async () => {
       ${statRow('B1: card_pools vs expenses 金額乖離', issuesB1.length, '紐付く支出と未払いプールの金額が一致しない')}
     </div>`;
 
+  const checkItems = [
+    'カード未払いが指す支出が存在するか',
+    'ID紐付けのないカード未払い（参考警告）',
+    '支出が指すカード未払いが存在するか',
+    'カード未払いが指す定期項目が存在するか',
+    '口座記録が指す収入が存在するか',
+    '口座記録が指す定期項目が存在するか',
+    '口座記録が指す支出が存在するか',
+    '支出が指す定期項目が存在するか',
+    '入金記録が指す引き下ろし元の記録が存在するか',
+    '手数料の口座記録が指す元の記録が存在するか',
+    '手数料の支出が指す口座記録が存在するか',
+    'デビットの口座記録が指す支出が存在するか',
+    'カード確定済みが指すカード未払いが存在するか（参考警告）',
+    'カード払いの支出を参照するカード未払いが存在するか',
+    'デビットの支出を参照する口座記録が存在するか',
+    'カード未払いと支出の金額が一致しているか',
+  ];
+  const checklistRows = checkItems
+    .map(t => `<div style="font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);">・${t}</div>`)
+    .join('');
+  const checklist = `<div class="card" style="margin-top:10px;"><div class="card-title" style="cursor:pointer;" onclick="const b=document.getElementById('hc_checklist');b.style.display=b.style.display==='none'?'block':'none';">点検した項目（${checkItems.length}件）▼</div><div id="hc_checklist" style="display:none;">${checklistRows}</div></div>`;
+
   resultEl.innerHTML = summary
+    + checklist
     + makeDetail('A1: card_pools.expenseId → expenses 欠落', 'card_pools', issuesA1, cpFields)
     + makeDetail('A1w: ⚠️ ID紐付けなしプール（参考警告・一括削除対象外）', 'card_pools', issuesA1Warn, cpFields)
     + makeDetail('A2: expenses.cardPoolId → card_pools 欠落', 'expenses', issuesA2, expFields)
@@ -5463,8 +5492,22 @@ window.runHealthCheck = async () => {
 };
 
 window.deleteHealthCheckOne = (col, id) => {
+  const colLabels = {
+    expenses: '支出', income: '収入', card_pools: 'カード未払い',
+    card_confirmed: 'カード確定済み', account_txs: '口座記録',
+    fixed_costs: '定期項目', card_billing_overrides: '請求月の上書き',
+  };
+  const typeName = colLabels[col] || col;
+  const rec = (_healthCheckDocs && _healthCheckDocs[col]) ? _healthCheckDocs[col].get(id) : null;
+  const lines = ['このデータを削除しますか？', `種類：${typeName}`];
+  if (rec) {
+    const name = rec.memo || rec.name || rec.shop || '';
+    const amount = (rec.amount != null && rec.amount !== '') ? Number(rec.amount).toLocaleString() + '円' : '';
+    const detail = [rec.date || '', name, amount].filter(Boolean).join(' ');
+    if (detail) lines.push(detail);
+  }
   showConfirm(
-    `このデータを削除しますか？\nコレクション：${col}\nid：${id}`,
+    lines.join('\n'),
     async () => {
       try {
         await deleteDoc(doc(db, col, id));
@@ -5476,7 +5519,7 @@ window.deleteHealthCheckOne = (col, id) => {
         showToast('削除に失敗しました');
       }
     },
-    '削除する'
+    '削除'
   );
 };
 
@@ -5500,7 +5543,7 @@ window.deleteHealthCheckIssues = () => {
       await loadMonthData();
       runHealthCheck();
     },
-    '削除する'
+    '削除'
   );
 };
 
