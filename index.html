@@ -418,6 +418,7 @@
   .card-pool-amount { font-size: 15px; font-weight: 700; color: var(--card-color); }
   .card-pool-check-spacer { width: 16px; flex-shrink: 0; }
   .recon-bar { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+  .recon-month-label { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
   .recon-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   .recon-lbl { font-size: 12px; color: var(--text2); flex-shrink: 0; }
   .recon-input { flex: 1; min-width: 90px; }
@@ -1704,7 +1705,7 @@ let accountTxs = [];    // 口座入出金ログ
 let cardPools = [];     // カード未払いプール
 let cardConfirmed = []; // カード引き落とし確定
 let _poolExpMap = {};   // 未確定プールの expenseId → expenses レコード（当月外含む一括取得。店名表示用。loadMonthDataで作り直す）
-const _cardReconcile = {}; // cardId → { billingMonth, statementTotal, statementCount, selected:Set<poolId> } 明細照合バーの作業用状態（Firestore非保存）
+const _cardReconcile = {}; // `${cardId}_${ym}` → { statementTotal, statementCount, selected:Set<poolId> } 明細照合バーの作業用状態（カード×表示月で分離・Firestore非保存）
 let fixedCosts = [];
 let cardBillingOverrides = []; // カード引き落とし日当月上書き
 let settings = {
@@ -2915,7 +2916,7 @@ function cardItemRowHtml(c, kind, prefixHtml = '', selectable = true) {
     const _shop = (_exp && _exp.shop) ? _exp.shop : '';
     const _mainName = _shop || c.memo || '（内容なし）';
     const _subMemo = (_shop && c.memo) ? c.memo : '';
-    const _stSel = _cardReconcile[c.cardId] && _cardReconcile[c.cardId].selected;
+    const _stSel = _cardReconcile[reconKey(c.cardId)] && _cardReconcile[reconKey(c.cardId)].selected;
     const _checked = (_stSel && _stSel.has(c.id)) ? 'checked' : '';
     const checkboxHtml = selectable
       ? `<input type="checkbox" class="card-pool-check" ${_checked} onchange="onCardPoolCheck('${c.id}', this)">`
@@ -3125,14 +3126,18 @@ function renderCardTab() {
 
 // ===== 明細照合バー（複数選択での一括確定） =====
 // 選択・明細総額・明細件数は _cardReconcile（module変数）にのみ保持し Firestore へは保存しない
+// 状態はカード×表示月で分離（キー=`${cardId}_${ym}`）。月をまたいで選択が混入しない（A-2）
+function reconKey(cardId) { return `${cardId}_${currentYM()}`; }
+function getRecon(cardId) {
+  const k = reconKey(cardId);
+  return _cardReconcile[k] || (_cardReconcile[k] = { statementTotal:'', statementCount:'', selected:new Set() });
+}
 function reconBarHtml(card) {
   const cid = card.id;
-  const st = _cardReconcile[cid] || (_cardReconcile[cid] = { billingMonth:'', statementTotal:'', statementCount:'', selected:new Set() });
+  const st = getRecon(cid);
+  const mm = Number(currentYM().split('-')[1]);
   return `<div class="recon-bar" data-card-id="${cid}">
-    <div class="recon-row">
-      <label class="recon-lbl">請求月</label>
-      <input type="month" class="form-input recon-input" id="recon-month-${cid}" value="${st.billingMonth||''}" oninput="reconInput('${cid}')" onchange="reconInput('${cid}')">
-    </div>
+    <div class="recon-month-label">${mm}月引落分として確定します</div>
     <div class="recon-row">
       <label class="recon-lbl">明細総額</label>
       <input type="number" inputmode="numeric" min="0" class="form-input recon-input" id="recon-total-${cid}" value="${st.statementTotal||''}" placeholder="明細の合計額" oninput="reconInput('${cid}')">
@@ -3150,11 +3155,10 @@ function reconBarHtml(card) {
   </div>`;
 }
 
-// 入力（請求月・明細総額・件数）を作業用stateへ同期し、表示を更新
+// 入力（明細総額・件数）を作業用stateへ同期し、表示を更新（請求月は表示中の月に固定・入力欄なし）
 window.reconInput = (cardId) => {
-  const st = _cardReconcile[cardId] || (_cardReconcile[cardId] = { billingMonth:'', statementTotal:'', statementCount:'', selected:new Set() });
+  const st = getRecon(cardId);
   const g = id => { const el = document.getElementById(id); return el ? el.value : ''; };
-  st.billingMonth = g(`recon-month-${cardId}`);
   st.statementTotal = g(`recon-total-${cardId}`);
   st.statementCount = g(`recon-count-${cardId}`);
   updateReconBar(cardId);
@@ -3162,23 +3166,21 @@ window.reconInput = (cardId) => {
 
 // 表示専用の一元計算。確定済みは card_pools の confirmedMonth（全期間ロード済み）から算出
 window.updateReconBar = (cardId) => {
-  const st = _cardReconcile[cardId];
+  const st = _cardReconcile[reconKey(cardId)];
   if (!st) return;
+  const month = currentYM(); // 確定先＝常に表示中の月
   let selAmt = 0, selCnt = 0;
   st.selected.forEach(pid => {
     const p = cardPools.find(x => x.id === pid && !x.confirmedMonth);
     if (p) { selAmt += (p.amount||0); selCnt++; }
   });
   let cfAmt = 0, cfCnt = 0;
-  const month = st.billingMonth;
-  if (month) {
-    cardPools.forEach(p => {
-      if (p.cardId === cardId && p.confirmedMonth === month) {
-        cfAmt += (p.installType === 'installment' ? (p.installAmt||0) : (p.amount||0));
-        cfCnt++;
-      }
-    });
-  }
+  cardPools.forEach(p => {
+    if (p.cardId === cardId && p.confirmedMonth === month) {
+      cfAmt += (p.installType === 'installment' ? (p.installAmt||0) : (p.amount||0));
+      cfCnt++;
+    }
+  });
   const combAmt = cfAmt + selAmt, combCnt = cfCnt + selCnt;
   const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
   setTxt(`recon-confirmed-${cardId}`, `¥${cfAmt.toLocaleString()}（${cfCnt}件）`);
@@ -3213,10 +3215,9 @@ function confirmPoolOnce(batch, pool, month) {
 
 // 選択分を1つの writeBatch でまとめて確定（全成功／全失敗）
 window.confirmSelectedPools = (cardId) => {
-  const st = _cardReconcile[cardId];
+  const st = _cardReconcile[reconKey(cardId)];
   if (!st) return;
-  const month = st.billingMonth;
-  if (!month) { alert('請求月を指定してください'); return; }
+  const month = currentYM(); // 確定先＝常に表示中の月
   // ✅（振替完了）済み月への追加は確定額が変わるためガード
   if (accountTxs.some(t => t.cardPayoutKey === `${cardId}_${month}`)) {
     alert('その月の引落は✅（振替完了）済みです。確定を追加するには先にカードタブで✅を解除してください。');
@@ -3233,7 +3234,8 @@ window.confirmSelectedPools = (cardId) => {
     alert(`一度に確定できるのは450件までです（選択：${targets.length}件）。件数を減らしてください。`);
     return;
   }
-  showConfirm(`選択した${targets.length}件を「${month}」の請求として確定します。`, async () => {
+  const _mm = Number(month.split('-')[1]);
+  showConfirm(`選択した${targets.length}件を「${month}（${_mm}月引落分）」として確定します。`, async () => {
     const batch = writeBatch(db);
     for (const p of targets) confirmPoolOnce(batch, p, month);
     try {
@@ -3254,7 +3256,7 @@ window.onCardPoolCheck = (id, checkbox) => {
   const pool = cardPools.find(x => x.id === id);
   if (!pool) return;
   const cardId = pool.cardId;
-  const st = _cardReconcile[cardId] || (_cardReconcile[cardId] = { billingMonth:'', statementTotal:'', statementCount:'', selected:new Set() });
+  const st = getRecon(cardId);
   if (checkbox.checked) st.selected.add(id);
   else st.selected.delete(id);
   updateReconBar(cardId);
@@ -3777,8 +3779,16 @@ window.saveFixed = async () => {
   const payDay = parseInt(document.getElementById('fix-payDay').value) || null;
   const payMethod = currentFixPayMethod || null;
   const payCardId = payMethod === 'card' ? (document.getElementById('fix-payCardId').value || null) : null;
-  if (payMethod === 'card' && !payCardId) { alert('支払い方法がカードの場合はカードを選択してください'); return; }
   const payAccountId = payMethod === 'transfer' ? (document.getElementById('fix-payAccountId').value || null) : null;
+  // カード／口座の必須検証は saveExpense と同一の判定関数に集約（判定ルールを2箇所に持たせない）
+  const _fixLinked = payMethod === 'card' ? payCardId : payMethod === 'transfer' ? payAccountId : '';
+  const _fixV = validatePaymentLink(payMethod, _fixLinked);
+  if (!_fixV.ok) {
+    alert(_fixV.message);
+    const _ff = document.getElementById(_fixV.kind === 'card' ? 'fix-payCardId' : 'fix-payAccountId');
+    if (_ff) _ff.focus();
+    return;
+  }
   // マスターは項目情報のみ。金額はここでは持たず、子データが唯一の事実
   const data = { name, kind: currentFixKind, payDay, payMethod, payCardId, payAccountId };
 
@@ -4155,12 +4165,33 @@ window.openExpenseModal = (id = null, date = null) => {
   openModal('expenseModal');
 };
 
+// 支払方法に対応する紐付け先（カード／口座）が選ばれているかの唯一の判定。saveExpense と saveFixed が共用（ルールを1箇所に集約）
+function validatePaymentLink(payMethod, linkedValue) {
+  if (payMethod === 'card' && !linkedValue) return { ok:false, kind:'card', message:'使用するカードを選択してください' };
+  if (payMethod === 'transfer' && !linkedValue) return { ok:false, kind:'account', message:'対象の口座を選択してください' };
+  return { ok:true };
+}
+
 window.saveExpense = async () => {
   const amount = calcGetValue('exp');
   const date = document.getElementById('exp-date').value;
   const shop = document.getElementById('exp-shop').value.trim();
   const memo = document.getElementById('exp-memo').value.trim();
   if (!amount || !date) { alert('金額と日付は必須です'); return; }
+
+  // 支払方法に対応する紐付け先の必須検証（保存を中止・モーダルは閉じない・不足欄へフォーカス）
+  const _payLinked = currentPayMethod === 'card'
+    ? document.getElementById('exp-cardId').value
+    : currentPayMethod === 'transfer'
+      ? document.getElementById('exp-accountId').value
+      : '';
+  const _payV = validatePaymentLink(currentPayMethod, _payLinked);
+  if (!_payV.ok) {
+    alert(_payV.message);
+    const _f = document.getElementById(_payV.kind === 'card' ? 'exp-cardId' : 'exp-accountId');
+    if (_f) _f.focus();
+    return;
+  }
 
   const breakdowns = [];
   document.querySelectorAll('#expBreakdownList .breakdown-row').forEach(row => {
@@ -5739,6 +5770,15 @@ window.setPayMethod = (method) => {
   });
   document.getElementById('payCardSelectWrap').style.display = method === 'card' ? 'block' : 'none';
   document.getElementById('payAccountSelectWrap').style.display = method === 'transfer' ? 'block' : 'none';
+  // 選択肢が1つだけなら自動選択（空のときのみ・2つ以上は推測しない）。編集で開いた既存の選択は上書きしない
+  if (method === 'card' && settings.cards.length === 1) {
+    const el = document.getElementById('exp-cardId');
+    if (el && !el.value) el.value = settings.cards[0].id;
+  }
+  if (method === 'transfer' && settings.accounts.length === 1) {
+    const el = document.getElementById('exp-accountId');
+    if (el && !el.value) el.value = settings.accounts[0].id;
+  }
 };
 
 window.setExpType = (type) => {
