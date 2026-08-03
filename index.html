@@ -2200,8 +2200,10 @@ async function loadMonthData() {
   const prevYmStart = `${prevYear}-${String(prevMon).padStart(2,'0')}-01`;
 
   const [expSnap, incSnap, txSnap, cpSnap, ccSnap, fixSnap, cboSnap] = await Promise.all([
-    getDocs(collection(db, 'expenses')),
-    getDocs(collection(db, 'income')),
+    // expenses/income はサーバ側で前月＋当月に範囲限定（date は 'YYYY-MM-DD' 文字列・単一フィールド範囲）。
+    // 取得後のクライアント側 date 判定は挙動同一性のため残す（前月分＝前月固定費/前月繰越、当月分＝配列）
+    getDocs(query(collection(db, 'expenses'), where('date', '>=', prevYmStart), where('date', '<', nextMonth))),
+    getDocs(query(collection(db, 'income'), where('date', '>=', prevYmStart), where('date', '<', nextMonth))),
     getDocs(collection(db, 'account_txs')),
     getDocs(collection(db, 'card_pools')),
     getDocs(collection(db, 'card_confirmed')),
