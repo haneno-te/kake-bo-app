@@ -3608,7 +3608,7 @@ function renderFixedTab() {
       const status = p.confirmedMonth
         ? `<span style="color:var(--income);">確定済み</span>`
         : `<span style="color:var(--bad);">プール待機</span>`;
-      actualRows.push(`<div class="fixed-item fixed-actual-row" data-kind="pool" data-card-id="${p.cardId || ''}" style="cursor:pointer;">
+      actualRows.push(`<div class="fixed-item fixed-actual-row" data-kind="pool" data-card-id="${p.cardId || ''}" data-expense-id="${p.expenseId || ''}" style="cursor:pointer;">
         <div class="fixed-item-left">
           <div class="fixed-item-name">${nameOf(p.fixedCostId, p.memo)}</div>
           <div class="fixed-item-type">${p.date || ''} <span class="pay-badge card">カード</span> ${status}</div>
@@ -3634,17 +3634,19 @@ function renderFixedTab() {
     <div class="card-section-body"${actualOpen ? '' : ' style="display:none;"'}>${actualRows.length ? actualRows.join('') : '<div style="font-size:12px;color:var(--text2);padding:8px 4px;">今月の登録実績なし</div>'}</div>`;
 }
 
-// 登録実績の行タップ→実データ側へ誘導（イベント委譲・表示専用の窓）
+// 登録実績の行タップ→その伝票の編集モーダルを直接開く（既存 openExpenseModal を使用＝ガードも従来どおり）
 document.getElementById('fixedList').addEventListener('click', (e) => {
   const row = e.target.closest('.fixed-actual-row');
   if (!row) return;
   if (row.dataset.kind === 'expense') {
-    // 既存のhighlight-jump動線（カレンダー日別パネルで該当レコードをハイライト）
-    switchTab('calendar');
-    setHighlight(row.dataset.id);
-    setTimeout(() => selectDate(row.dataset.date), 100);
+    // expense由来（振込・現金・デビット）。行は当月expenses配列由来のため在メモリに存在
+    openExpenseModal(row.dataset.id);
   } else if (row.dataset.kind === 'pool') {
-    if (row.dataset.cardId) goToCardAccordion(row.dataset.cardId);
+    // カード定期。プールの対expenseで編集モーダルを開く。
+    // expenseId欠落（旧形式）／対expenseが在メモリに無い場合は従来のカードタブ導線へフォールバック
+    const eid = row.dataset.expenseId;
+    if (eid && expenses.some(x => x.id === eid)) openExpenseModal(eid);
+    else if (row.dataset.cardId) goToCardAccordion(row.dataset.cardId);
     else switchTab('card');
   }
 });
