@@ -1862,16 +1862,23 @@ function getEffectiveBillingDay(card) {
 window.selectedDate = null;
 
 // ===== 月移動 =====
-window.changeMonth = (delta) => {
+// 月の絶対移動（状態リセットは changeMonth と共通＝月切替は1本道）。loadMonthData の Promise を返す＝完了を待てる
+function goToYearMonth(year, month) {
   _highlightExpenseId = null;
-  currentMonth += delta;
-  if (currentMonth > 12) { currentMonth = 1; currentYear++; }
-  if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+  currentYear = year;
+  currentMonth = month;
   selectedDate = null;
   window.selectedDate = null;
   document.getElementById('calDayPanel').classList.remove('open');
   updateMonthLabel();
-  loadMonthData();
+  return loadMonthData();
+}
+
+window.changeMonth = (delta) => {
+  let y = currentYear, m = currentMonth + delta;
+  if (m > 12) { m = 1; y++; }
+  if (m < 1) { m = 12; y--; }
+  goToYearMonth(y, m);
 };
 
 function updateMonthLabel() {
@@ -3608,7 +3615,7 @@ function renderFixedTab() {
       const status = p.confirmedMonth
         ? `<span style="color:var(--income);">確定済み</span>`
         : `<span style="color:var(--bad);">プール待機</span>`;
-      actualRows.push(`<div class="fixed-item fixed-actual-row" data-kind="pool" data-card-id="${p.cardId || ''}" data-expense-id="${p.expenseId || ''}" style="cursor:pointer;">
+      actualRows.push(`<div class="fixed-item fixed-actual-row" data-kind="pool" data-card-id="${p.cardId || ''}" data-expense-id="${p.expenseId || ''}" data-date="${p.date || ''}" style="cursor:pointer;">
         <div class="fixed-item-left">
           <div class="fixed-item-name">${nameOf(p.fixedCostId, p.memo)}</div>
           <div class="fixed-item-type">${p.date || ''} <span class="pay-badge card">カード</span> ${status}</div>
@@ -3635,18 +3642,30 @@ function renderFixedTab() {
 }
 
 // 登録実績の行タップ→その伝票の編集モーダルを直接開く（既存 openExpenseModal を使用＝ガードも従来どおり）
-document.getElementById('fixedList').addEventListener('click', (e) => {
+document.getElementById('fixedList').addEventListener('click', async (e) => {
   const row = e.target.closest('.fixed-actual-row');
   if (!row) return;
-  if (row.dataset.kind === 'expense') {
+  // 行の値は await の前に取得（再描画で行要素が失われても破綻しないため）
+  const kind = row.dataset.kind;
+  const eid = row.dataset.expenseId;
+  const cardId = row.dataset.cardId;
+  const date = row.dataset.date;
+  if (kind === 'expense') {
     // expense由来（振込・現金・デビット）。行は当月expenses配列由来のため在メモリに存在
     openExpenseModal(row.dataset.id);
-  } else if (row.dataset.kind === 'pool') {
-    // カード定期。プールの対expenseで編集モーダルを開く。
-    // expenseId欠落（旧形式）／対expenseが在メモリに無い場合は従来のカードタブ導線へフォールバック
-    const eid = row.dataset.expenseId;
-    if (eid && expenses.some(x => x.id === eid)) openExpenseModal(eid);
-    else if (row.dataset.cardId) goToCardAccordion(row.dataset.cardId);
+  } else if (kind === 'pool') {
+    // カード定期。対expenseで編集モーダルを開く（既存 openExpenseModal＝ガードも従来どおり）
+    if (eid && expenses.some(x => x.id === eid)) { openExpenseModal(eid); return; }
+    // 当月外（決済日月≠表示月）：決済日の月へ表示を移動（共通の月切替経路）→ ロード完了後に開く（C案）
+    if (eid && date && date.length >= 7) {
+      await goToYearMonth(Number(date.slice(0, 4)), Number(date.slice(5, 7)));
+      if (expenses.some(x => x.id === eid)) openExpenseModal(eid);
+      else if (cardId) goToCardAccordion(cardId); // 実在しない等→フォールバック
+      else switchTab('card');
+      return;
+    }
+    // expenseId欠落（旧形式）／date欠落→従来のカードタブ導線へフォールバック
+    if (cardId) goToCardAccordion(cardId);
     else switchTab('card');
   }
 });
