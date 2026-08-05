@@ -1696,6 +1696,7 @@ const FIXED_ICON = '🔁'; // 定期由来（fixedCostId あり）の目印。�
 let currentYear, currentMonth;
 let selectedDate = null;
 let _highlightExpenseId = null;
+let _editReturnYm = null; // 定期タブから当月外の伝票を編集する際の「入口の月」。編集モーダルを閉じたらこの月へ戻す
 let _prevMonthIncome = 0;
 let _currMonthIncomeUnchecked = 0;
 let _prevFixedAmounts = {}; // fixedCostId → { amount, date } 前月の同固定費の金額（登録モーダルのプレロード用）
@@ -3658,8 +3659,9 @@ document.getElementById('fixedList').addEventListener('click', async (e) => {
     if (eid && expenses.some(x => x.id === eid)) { openExpenseModal(eid); return; }
     // 当月外（決済日月≠表示月）：決済日の月へ表示を移動（共通の月切替経路）→ ロード完了後に開く（C案）
     if (eid && date && date.length >= 7) {
+      const fromYm = currentYM(); // 入口の月（編集後に戻す先）
       await goToYearMonth(Number(date.slice(0, 4)), Number(date.slice(5, 7)));
-      if (expenses.some(x => x.id === eid)) openExpenseModal(eid);
+      if (expenses.some(x => x.id === eid)) { _editReturnYm = fromYm; openExpenseModal(eid); }
       else if (cardId) goToCardAccordion(cardId); // 実在しない等→フォールバック
       else switchTab('card');
       return;
@@ -5971,7 +5973,15 @@ function openModal(id) {
 window.closeModal = (id) => {
   document.getElementById(id).classList.remove('open');
   const resetMap = {
-    'expenseModal':    () => { editingExpenseId = null; },
+    'expenseModal':    () => {
+      editingExpenseId = null;
+      // 定期タブから当月外編集で月を移動していた場合、入口の月へ戻す（保存/キャンセル/×いずれも通る）
+      if (_editReturnYm && _editReturnYm !== currentYM()) {
+        const [ry, rm] = _editReturnYm.split('-').map(Number);
+        goToYearMonth(ry, rm);
+      }
+      _editReturnYm = null;
+    },
     'incomeModal':     () => { editingIncomeId = null; },
     'fixedModal':      () => { editingFixedId = null; },
     'accountTxModal':  () => { editingAccountTxId = null; },
