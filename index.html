@@ -1875,6 +1875,21 @@ function goToYearMonth(year, month) {
   return loadMonthData();
 }
 
+// 決済日の月へ移動 → ロード後に在メモリを確認 → _editReturnYm をセットして開く（C案の共通経路）。
+// 定期タブ・カードタブの当月外編集で共用。在メモリにあれば月移動せず即開き（_editReturnYm もセットしない）。
+// eid: 対象expenseのid / dateStr: 決済日'YYYY-MM-DD' / onMissing: 月移動しても見つからない等のフォールバック（任意）
+async function openExpenseAcrossMonth(eid, dateStr, onMissing) {
+  if (eid && expenses.some(x => x.id === eid)) { openExpenseModal(eid); return; }
+  if (eid && dateStr && dateStr.length >= 7) {
+    const fromYm = currentYM(); // 入口の月（編集後に戻す先）
+    await goToYearMonth(Number(dateStr.slice(0, 4)), Number(dateStr.slice(5, 7)));
+    if (expenses.some(x => x.id === eid)) { _editReturnYm = fromYm; openExpenseModal(eid); }
+    else if (onMissing) onMissing();
+    return;
+  }
+  if (onMissing) onMissing();
+}
+
 window.changeMonth = (delta) => {
   let y = currentYear, m = currentMonth + delta;
   if (m > 12) { m = 1; y++; }
@@ -3428,7 +3443,8 @@ window.openMasterFromCardItem = async (itemId, kind) => {
     return;
   }
   if (target.expenseId) {
-    openExpenseModal(target.expenseId);
+    // 当月外の伝票は決済日(target.date)の月へ移動してから開く（C案。定期タブと同じ共通ヘルパー）
+    await openExpenseAcrossMonth(target.expenseId, target.date);
     return;
   }
   const found = expenses.find(e =>
@@ -3655,20 +3671,12 @@ document.getElementById('fixedList').addEventListener('click', async (e) => {
     // expense由来（振込・現金・デビット）。行は当月expenses配列由来のため在メモリに存在
     openExpenseModal(row.dataset.id);
   } else if (kind === 'pool') {
-    // カード定期。対expenseで編集モーダルを開く（既存 openExpenseModal＝ガードも従来どおり）
-    if (eid && expenses.some(x => x.id === eid)) { openExpenseModal(eid); return; }
-    // 当月外（決済日月≠表示月）：決済日の月へ表示を移動（共通の月切替経路）→ ロード完了後に開く（C案）
-    if (eid && date && date.length >= 7) {
-      const fromYm = currentYM(); // 入口の月（編集後に戻す先）
-      await goToYearMonth(Number(date.slice(0, 4)), Number(date.slice(5, 7)));
-      if (expenses.some(x => x.id === eid)) { _editReturnYm = fromYm; openExpenseModal(eid); }
-      else if (cardId) goToCardAccordion(cardId); // 実在しない等→フォールバック
+    // カード定期。当月外は決済日の月へ移動して開く（C案）。月移動＋開く＋復帰は共通ヘルパーに集約
+    await openExpenseAcrossMonth(eid, date, () => {
+      // expenseId欠落（旧形式）／date欠落／実在しない等→従来のカードタブ導線へフォールバック
+      if (cardId) goToCardAccordion(cardId);
       else switchTab('card');
-      return;
-    }
-    // expenseId欠落（旧形式）／date欠落→従来のカードタブ導線へフォールバック
-    if (cardId) goToCardAccordion(cardId);
-    else switchTab('card');
+    });
   }
 });
 
