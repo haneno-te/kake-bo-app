@@ -1552,6 +1552,10 @@
       <label class="form-label">カード引落口座（✅振替完了の出金元）</label>
       <select class="form-select" id="editSettingPayoutAccountId"></select>
     </div>
+    <div class="form-row" id="editSettingAliasRow" style="display:none;">
+      <label class="form-label">カード明細での表記</label>
+      <textarea class="form-input" id="editSettingAlias" rows="3" placeholder="カード明細での表記（1行に1つ）"></textarea>
+    </div>
     <button class="btn-primary" onclick="saveSettingEdit()">保存</button>
     <button class="btn-secondary" id="editSettingCancelBtn" onclick="closeModal('settingEditModal')">キャンセル</button>
   </div>
@@ -2948,7 +2952,14 @@ window.setCardFilterScope = (scope) => {
 function poolRowName(rec) {
   const exp = rec.expenseId ? _poolExpMap[rec.expenseId] : null;
   const shop = (exp && exp.shop) ? exp.shop : '';
-  return { mainName: shop || rec.memo || '（内容なし）', subMemo: (shop && rec.memo) ? rec.memo : '' };
+  // 2段目：店に明細表記(cardAliases)が登録されていれば全て ' / ' 連結で優先表示、無ければ従来どおりメモ
+  let subMemo = (shop && rec.memo) ? rec.memo : '';
+  if (shop) {
+    const master = settings.shops.find(s => s.name === shop);
+    const aliases = (master && Array.isArray(master.cardAliases)) ? master.cardAliases.filter(a => a && a.trim()) : [];
+    if (aliases.length) subMemo = aliases.join(' / ');
+  }
+  return { mainName: shop || rec.memo || '（内容なし）', subMemo };
 }
 
 function cardItemRowHtml(c, kind, prefixHtml = '', selectable = true) {
@@ -5412,6 +5423,15 @@ window.openSettingEditModal = (id, type) => {
     debitAccountRow.style.display = 'none';
     payoutAccountRow.style.display = 'none';
   }
+  // 明細表記（店マスターのみ）。配列を改行連結で欄へ戻す
+  const aliasRow = document.getElementById('editSettingAliasRow');
+  if (type === 'shop') {
+    aliasRow.style.display = '';
+    document.getElementById('editSettingAlias').value =
+      Array.isArray(item.cardAliases) ? item.cardAliases.join('\n') : '';
+  } else {
+    aliasRow.style.display = 'none';
+  }
   openModal('settingEditModal');
   setTimeout(() => document.getElementById('editSettingCancelBtn').focus(), 50);
 };
@@ -5434,6 +5454,11 @@ window.saveSettingEdit = async () => {
     data.isDebit = isDebit;
     data.debitAccountId = isDebit ? (document.getElementById('editSettingDebitAccountId').value || null) : null;
     data.payoutAccountId = document.getElementById('editSettingPayoutAccountId').value || null;
+  }
+  if (editingSettingType === 'shop') {
+    // 明細表記：1行=1つ。空行・前後空白を捨てて配列化（未入力は空配列）
+    data.cardAliases = document.getElementById('editSettingAlias').value
+      .split('\n').map(s => s.trim()).filter(Boolean);
   }
   await updateDoc(doc(db, 'kakeibo_settings', editingSettingId), data);
   closeModal('settingEditModal');
