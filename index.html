@@ -1554,7 +1554,7 @@
     </div>
     <div class="form-row" id="editSettingAliasRow" style="display:none;">
       <label class="form-label">カード明細での表記</label>
-      <textarea class="form-input" id="editSettingAlias" rows="3" placeholder="カード明細での表記（1行に1つ）"></textarea>
+      <textarea class="form-input" id="editSettingAlias" rows="3" placeholder="カード明細での表記（1行に1つ）" style="font-family: inherit;"></textarea>
     </div>
     <button class="btn-primary" onclick="saveSettingEdit()">保存</button>
     <button class="btn-secondary" id="editSettingCancelBtn" onclick="closeModal('settingEditModal')">キャンセル</button>
@@ -2957,7 +2957,7 @@ function poolRowName(rec) {
   if (shop) {
     const master = settings.shops.find(s => s.name === shop);
     const aliases = (master && Array.isArray(master.cardAliases)) ? master.cardAliases.filter(a => a && a.trim()) : [];
-    if (aliases.length) subMemo = aliases.join(' / ');
+    if (aliases.length) subMemo = aliases.join(' | ');
   }
   return { mainName: shop || rec.memo || '（内容なし）', subMemo };
 }
