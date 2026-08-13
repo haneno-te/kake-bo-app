@@ -265,6 +265,30 @@
   .form-input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   .form-input[type=number] { -moz-appearance: textfield; }
   .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  /* 店・場所 部分一致の候補（exp-shop直下に絶対配置・縦スクロール・上限なし） */
+  .shop-suggest {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    margin-top: 2px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .shop-suggest-item {
+    padding: 9px 12px;
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .shop-suggest-item:last-child { border-bottom: none; }
+  .shop-suggest-item:active { background: var(--surface); }
 
   /* ボタン */
   .btn-primary {
@@ -1194,11 +1218,12 @@
       <select class="form-select" id="exp-shopSelect" onchange="onExpShopSelectChange()" style="margin-bottom:6px;">
         <option value="">-- テンプレから選択 --</option>
       </select>
-      <div style="display:flex;align-items:center;gap:8px;">
+      <div style="display:flex;align-items:center;gap:8px;position:relative;">
         <input type="text" class="form-input" id="exp-shop" placeholder="または直接入力" style="flex:1;">
         <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2);white-space:nowrap;cursor:pointer;">
           <input type="checkbox" id="exp-shopRegister" style="accent-color:var(--accent);" onchange="onShopRegisterToggle()">テンプレ登録
         </label>
+        <div id="exp-shopSuggest" class="shop-suggest" style="display:none;"></div>
       </div>
       <select class="form-select" id="exp-shopGroupSel" style="display:none;margin-top:6px;">
         <option value="">未分類</option>
@@ -4234,6 +4259,7 @@ window.openExpenseModal = (id = null, date = null) => {
     document.getElementById('expFeeWrap').style.display = 'none';
     calcSet('expfee', '');
   }
+  clearShopSuggest(); // 開くたびに前回の候補が残らないようクリア（新規・編集どちらの分岐も通る）
   openModal('expenseModal');
 };
 
@@ -4560,6 +4586,7 @@ window.deleteExpense = (id) => {
 window.onExpShopSelectChange = () => {
   const v = document.getElementById('exp-shopSelect').value;
   if (v) document.getElementById('exp-shop').value = v;
+  clearShopSuggest(); // プルダウン選択時に手入力の候補が残らないようクリア
 };
 
 // テンプレ登録チェックでグループ選択プルダウンを表示/非表示
@@ -4567,6 +4594,34 @@ window.onShopRegisterToggle = () => {
   const on = document.getElementById('exp-shopRegister').checked;
   document.getElementById('exp-shopGroupSel').style.display = on ? 'block' : 'none';
 };
+
+// ===== 店・場所 部分一致の候補表示 =====
+// settings.shops を同期フィルタ（単純部分一致・正規化なし・hidden含む・上限なし・order順そのまま）。
+// Firestore への追加取得はしない。候補選択も手打ちも最終的に exp-shop.value を saveExpense が読む同一動線。
+function renderShopSuggest() {
+  const box = document.getElementById('exp-shopSuggest');
+  const q = document.getElementById('exp-shop').value;
+  if (!q) { clearShopSuggest(); return; }
+  const matches = settings.shops.filter(s => (s.name || '').includes(q));
+  if (matches.length === 0) { clearShopSuggest(); return; }
+  box.innerHTML = matches.map(s =>
+    `<div class="shop-suggest-item" data-name="${escAttr(s.name)}">${escAttr(s.name)}</div>`
+  ).join('');
+  box.style.display = 'block';
+}
+function clearShopSuggest() {
+  const box = document.getElementById('exp-shopSuggest');
+  if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+}
+document.getElementById('exp-shop').addEventListener('input', renderShopSuggest);
+document.getElementById('exp-shop').addEventListener('blur', clearShopSuggest);
+document.getElementById('exp-shopSuggest').addEventListener('mousedown', (e) => {
+  const item = e.target.closest('.shop-suggest-item');
+  if (!item) return;
+  e.preventDefault(); // 候補タップを blur より先に確定させ blur を抑止（Enter/上下キーは使わない）
+  document.getElementById('exp-shop').value = item.dataset.name;
+  clearShopSuggest();
+});
 
 function appendBreakdownRow(b = {}) {
   // 既存データは bdCatGroupId='' の場合があるため「カテゴリなし」='__none__' に寄せる（保存時も'__none__'で統一）
@@ -6008,6 +6063,7 @@ window.closeModal = (id) => {
   const resetMap = {
     'expenseModal':    () => {
       editingExpenseId = null;
+      clearShopSuggest(); // 店・場所の候補が残らないようクリア
       // 定期タブから当月外編集で月を移動していた場合、入口の月へ戻す（保存/キャンセル/×いずれも通る）
       if (_editReturnYm && _editReturnYm !== currentYM()) {
         const [ry, rm] = _editReturnYm.split('-').map(Number);
